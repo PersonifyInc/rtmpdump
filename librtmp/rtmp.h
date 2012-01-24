@@ -102,6 +102,8 @@ extern "C"
 #define RTMP_PACKET_SIZE_SMALL    2
 #define RTMP_PACKET_SIZE_MINIMUM  3
 
+  typedef int (*RTMP_INVOCATION_HANDLER)(AMFObject *obj,void* pCtx);
+  
   typedef struct RTMPChunk
   {
     int c_headerSize;
@@ -273,6 +275,9 @@ extern "C"
     RTMPPacket m_write;
     RTMPSockBuf m_sb;
     RTMP_LNK Link;
+
+    RTMP_INVOCATION_HANDLER userHandler;
+    void                    *userHandlerCtx;
   } RTMP;
 
   int RTMP_ParseURL(const char *url, int *protocol, AVal *host,

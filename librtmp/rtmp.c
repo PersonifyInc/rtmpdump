@@ -259,6 +259,8 @@ RTMP_Init(RTMP *r)
   r->m_fVideoCodecs = 252.0;
   r->Link.timeout = 30;
   r->Link.swfAge = 30;
+  r->userHandler = NULL;
+  r->userHandlerCtx = NULL;
 }
 
 void
@@ -2361,127 +2363,127 @@ HandleInvoke(RTMP *r, const char *body, unsigned int nBodySize)
   RTMP_Log(RTMP_LOGDEBUG, "%s, server invoking <%s>", __FUNCTION__, method.av_val);
 
   if (AVMATCH(&method, &av__result))
-    {
+  {
       AVal methodInvoked = {0};
       int i;
 
       for (i=0; i<r->m_numCalls; i++) {
-	if (r->m_methodCalls[i].num == (int)txn) {
-	  methodInvoked = r->m_methodCalls[i].name;
-	  AV_erase(r->m_methodCalls, &r->m_numCalls, i, FALSE);
-	  break;
-	}
+          if (r->m_methodCalls[i].num == txn) {
+              methodInvoked = r->m_methodCalls[i].name;
+              AV_erase(r->m_methodCalls, &r->m_numCalls, i, FALSE);
+              break;
+          }
       }
       if (!methodInvoked.av_val) {
-        RTMP_Log(RTMP_LOGDEBUG, "%s, received result id %f without matching request",
-	  __FUNCTION__, txn);
-	goto leave;
+          RTMP_Log(RTMP_LOGDEBUG, "%s, received result id %d without matching request",
+              __FUNCTION__, txn);
+          goto leave;
       }
 
       RTMP_Log(RTMP_LOGDEBUG, "%s, received result for method call <%s>", __FUNCTION__,
-	  methodInvoked.av_val);
+          methodInvoked.av_val);
 
       if (AVMATCH(&methodInvoked, &av_connect))
-	{
-	  if (r->Link.token.av_len)
-	    {
-	      AMFObjectProperty p;
-	      if (RTMP_FindFirstMatchingProperty(&obj, &av_secureToken, &p))
-		{
-		  DecodeTEA(&r->Link.token, &p.p_vu.p_aval);
-		  SendSecureTokenResponse(r, &p.p_vu.p_aval);
-		}
-	    }
-	  if (r->Link.protocol & RTMP_FEATURE_WRITE)
-	    {
-	      SendReleaseStream(r);
-	      SendFCPublish(r);
-	    }
-	  else
-	    {
-	      RTMP_SendServerBW(r);
-	      RTMP_SendCtrl(r, 3, 0, 300);
-	    }
-	  RTMP_SendCreateStream(r);
+      {
+          if (r->Link.token.av_len)
+          {
+              AMFObjectProperty p;
+              if (RTMP_FindFirstMatchingProperty(&obj, &av_secureToken, &p))
+              {
+                  DecodeTEA(&r->Link.token, &p.p_vu.p_aval);
+                  SendSecureTokenResponse(r, &p.p_vu.p_aval);
+              }
+          }
+          if (r->Link.protocol & RTMP_FEATURE_WRITE)
+          {
+              SendReleaseStream(r);
+              SendFCPublish(r);
+          }
+          else
+          {
+              RTMP_SendServerBW(r);
+              RTMP_SendCtrl(r, 3, 0, 300);
+          }
+          RTMP_SendCreateStream(r);
 
-	  if (!(r->Link.protocol & RTMP_FEATURE_WRITE))
-	    {
+          if (!(r->Link.protocol & RTMP_FEATURE_WRITE))
+          {
 	      /* Authenticate on Justin.tv legacy servers before sending FCSubscribe */
 	      if (r->Link.usherToken.av_len)
 	        SendUsherToken(r, &r->Link.usherToken);
-	      /* Send the FCSubscribe if live stream or if subscribepath is set */
-	      if (r->Link.subscribepath.av_len)
-	        SendFCSubscribe(r, &r->Link.subscribepath);
-	      else if (r->Link.lFlags & RTMP_LF_LIVE)
-	        SendFCSubscribe(r, &r->Link.playpath);
-	    }
-	}
+              /* Send the FCSubscribe if live stream or if subscribepath is set */
+              if (r->Link.subscribepath.av_len)
+                  SendFCSubscribe(r, &r->Link.subscribepath);
+              else if (r->Link.lFlags & RTMP_LF_LIVE)
+                  SendFCSubscribe(r, &r->Link.playpath);
+          }
+      }
       else if (AVMATCH(&methodInvoked, &av_createStream))
-	{
-	  r->m_stream_id = (int)AMFProp_GetNumber(AMF_GetProp(&obj, NULL, 3));
+      {
+          r->m_stream_id = (int)AMFProp_GetNumber(AMF_GetProp(&obj, NULL, 3));
 
-	  if (r->Link.protocol & RTMP_FEATURE_WRITE)
-	    {
-	      SendPublish(r);
-	    }
-	  else
-	    {
-	      if (r->Link.lFlags & RTMP_LF_PLST)
-	        SendPlaylist(r);
-	      SendPlay(r);
-	      RTMP_SendCtrl(r, 3, r->m_stream_id, r->m_nBufferMS);
-	    }
-	}
+          if (r->Link.protocol & RTMP_FEATURE_WRITE)
+          {
+              SendPublish(r);
+          }
+          else
+          {
+              if (r->Link.lFlags & RTMP_LF_PLST)
+                  SendPlaylist(r);
+              SendPlay(r);
+              RTMP_SendCtrl(r, 3, r->m_stream_id, r->m_nBufferMS);
+          }
+      }
       else if (AVMATCH(&methodInvoked, &av_play) ||
-      	AVMATCH(&methodInvoked, &av_publish))
-	{
-	  r->m_bPlaying = TRUE;
-	}
+          AVMATCH(&methodInvoked, &av_publish))
+      {
+          r->m_bPlaying = TRUE;
+      }
       free(methodInvoked.av_val);
-    }
+  }
   else if (AVMATCH(&method, &av_onBWDone))
-    {
-	  if (!r->m_nBWCheckCounter)
-        SendCheckBW(r);
-    }
+  {
+      if (!r->m_nBWCheckCounter)
+          SendCheckBW(r);
+  }
   else if (AVMATCH(&method, &av_onFCSubscribe))
-    {
+  {
       /* SendOnFCSubscribe(); */
-    }
+  }
   else if (AVMATCH(&method, &av_onFCUnsubscribe))
-    {
+  {
       RTMP_Close(r);
       ret = 1;
-    }
+  }
   else if (AVMATCH(&method, &av_ping))
-    {
+  {
       SendPong(r, txn);
-    }
+  }
   else if (AVMATCH(&method, &av__onbwcheck))
-    {
+  {
       SendCheckBWResult(r, txn);
-    }
+  }
   else if (AVMATCH(&method, &av__onbwdone))
-    {
+  {
       int i;
       for (i = 0; i < r->m_numCalls; i++)
-	if (AVMATCH(&r->m_methodCalls[i].name, &av__checkbw))
-	  {
-	    AV_erase(r->m_methodCalls, &r->m_numCalls, i, TRUE);
-	    break;
-	  }
-    }
+          if (AVMATCH(&r->m_methodCalls[i].name, &av__checkbw))
+          {
+              AV_erase(r->m_methodCalls, &r->m_numCalls, i, TRUE);
+              break;
+          }
+  }
   else if (AVMATCH(&method, &av__error))
-    {
+  {
       RTMP_Log(RTMP_LOGERROR, "rtmp server sent error");
-    }
+  }
   else if (AVMATCH(&method, &av_close))
-    {
+  {
       RTMP_Log(RTMP_LOGERROR, "rtmp server requested close");
       RTMP_Close(r);
-    }
+  }
   else if (AVMATCH(&method, &av_onStatus))
-    {
+  {
       AMFObject obj2;
       AVal code, level;
       AMFProp_GetObject(AMF_GetProp(&obj, NULL, 3), &obj2);
@@ -2490,83 +2492,86 @@ HandleInvoke(RTMP *r, const char *body, unsigned int nBodySize)
 
       RTMP_Log(RTMP_LOGDEBUG, "%s, onStatus: %s", __FUNCTION__, code.av_val);
       if (AVMATCH(&code, &av_NetStream_Failed)
-	  || AVMATCH(&code, &av_NetStream_Play_Failed)
-	  || AVMATCH(&code, &av_NetStream_Play_StreamNotFound)
-	  || AVMATCH(&code, &av_NetConnection_Connect_InvalidApp))
-	{
-	  r->m_stream_id = -1;
-	  RTMP_Close(r);
-	  RTMP_Log(RTMP_LOGERROR, "Closing connection: %s", code.av_val);
-	}
+          || AVMATCH(&code, &av_NetStream_Play_Failed)
+          || AVMATCH(&code, &av_NetStream_Play_StreamNotFound)
+          || AVMATCH(&code, &av_NetConnection_Connect_InvalidApp))
+      {
+          r->m_stream_id = -1;
+          RTMP_Close(r);
+          RTMP_Log(RTMP_LOGERROR, "Closing connection: %s", code.av_val);
+      }
 
       else if (AVMATCH(&code, &av_NetStream_Play_Start)
            || AVMATCH(&code, &av_NetStream_Play_PublishNotify))
-	{
-	  int i;
-	  r->m_bPlaying = TRUE;
-	  for (i = 0; i < r->m_numCalls; i++)
-	    {
-	      if (AVMATCH(&r->m_methodCalls[i].name, &av_play))
-		{
-		  AV_erase(r->m_methodCalls, &r->m_numCalls, i, TRUE);
-		  break;
-		}
-	    }
-	}
+      {
+          int i;
+          r->m_bPlaying = TRUE;
+          for (i = 0; i < r->m_numCalls; i++)
+          {
+              if (AVMATCH(&r->m_methodCalls[i].name, &av_play))
+              {
+                  AV_erase(r->m_methodCalls, &r->m_numCalls, i, TRUE);
+                  break;
+              }
+          }
+      }
 
       else if (AVMATCH(&code, &av_NetStream_Publish_Start))
-	{
-	  int i;
-	  r->m_bPlaying = TRUE;
-	  for (i = 0; i < r->m_numCalls; i++)
-	    {
-	      if (AVMATCH(&r->m_methodCalls[i].name, &av_publish))
-		{
-		  AV_erase(r->m_methodCalls, &r->m_numCalls, i, TRUE);
-		  break;
-		}
-	    }
-	}
+      {
+          int i;
+          r->m_bPlaying = TRUE;
+          for (i = 0; i < r->m_numCalls; i++)
+          {
+              if (AVMATCH(&r->m_methodCalls[i].name, &av_publish))
+              {
+                  AV_erase(r->m_methodCalls, &r->m_numCalls, i, TRUE);
+                  break;
+              }
+          }
+      }
 
       /* Return 1 if this is a Play.Complete or Play.Stop */
       else if (AVMATCH(&code, &av_NetStream_Play_Complete)
-	  || AVMATCH(&code, &av_NetStream_Play_Stop)
-	  || AVMATCH(&code, &av_NetStream_Play_UnpublishNotify))
-	{
-	  RTMP_Close(r);
-	  ret = 1;
-	}
+          || AVMATCH(&code, &av_NetStream_Play_Stop)
+          || AVMATCH(&code, &av_NetStream_Play_UnpublishNotify))
+      {
+          RTMP_Close(r);
+          ret = 1;
+      }
 
       else if (AVMATCH(&code, &av_NetStream_Seek_Notify))
-        {
-	  r->m_read.flags &= ~RTMP_READ_SEEKING;
-	}
+      {
+          r->m_read.flags &= ~RTMP_READ_SEEKING;
+      }
 
       else if (AVMATCH(&code, &av_NetStream_Pause_Notify))
-        {
-	  if (r->m_pausing == 1 || r->m_pausing == 2)
-	  {
-	    RTMP_SendPause(r, FALSE, r->m_pauseStamp);
-	    r->m_pausing = 3;
-	  }
-	}
-    }
+      {
+          if (r->m_pausing == 1 || r->m_pausing == 2)
+          {
+              RTMP_SendPause(r, FALSE, r->m_pauseStamp);
+              r->m_pausing = 3;
+          }
+      }
+  }
   else if (AVMATCH(&method, &av_playlist_ready))
-    {
+  {
       int i;
       for (i = 0; i < r->m_numCalls; i++)
-        {
+      {
           if (AVMATCH(&r->m_methodCalls[i].name, &av_set_playlist))
-	    {
-	      AV_erase(r->m_methodCalls, &r->m_numCalls, i, TRUE);
-	      break;
-	    }
-        }
-    }
+          {
+              AV_erase(r->m_methodCalls, &r->m_numCalls, i, TRUE);
+              break;
+          }
+      }
+  }
   else
-    {
-
-    }
+  {
+      if(r->userHandler)
+      {
+          r->userHandler(&obj,r->userHandlerCtx);
+      }
+  }
 leave:
   AMF_Reset(&obj);
   return ret;
@@ -2574,51 +2579,51 @@ leave:
 
 int
 RTMP_FindFirstMatchingProperty(AMFObject *obj, const AVal *name,
-			       AMFObjectProperty * p)
+                               AMFObjectProperty * p)
 {
-  int n;
-  /* this is a small object search to locate the "duration" property */
-  for (n = 0; n < obj->o_num; n++)
+    int n;
+    /* this is a small object search to locate the "duration" property */
+    for (n = 0; n < obj->o_num; n++)
     {
-      AMFObjectProperty *prop = AMF_GetProp(obj, NULL, n);
+        AMFObjectProperty *prop = AMF_GetProp(obj, NULL, n);
 
-      if (AVMATCH(&prop->p_name, name))
-	{
-	  memcpy(p, prop, sizeof(*prop));
-	  return TRUE;
-	}
+        if (AVMATCH(&prop->p_name, name))
+        {
+            *p = *prop;
+            return TRUE;
+        }
 
-      if (prop->p_type == AMF_OBJECT)
-	{
-	  if (RTMP_FindFirstMatchingProperty(&prop->p_vu.p_object, name, p))
-	    return TRUE;
-	}
+        if (prop->p_type == AMF_OBJECT)
+        {
+            if (RTMP_FindFirstMatchingProperty(&prop->p_vu.p_object, name, p))
+                return TRUE;
+        }
     }
-  return FALSE;
+    return FALSE;
 }
 
 /* Like above, but only check if name is a prefix of property */
 int
 RTMP_FindPrefixProperty(AMFObject *obj, const AVal *name,
-			       AMFObjectProperty * p)
+                        AMFObjectProperty * p)
 {
-  int n;
-  for (n = 0; n < obj->o_num; n++)
+    int n;
+    for (n = 0; n < obj->o_num; n++)
     {
-      AMFObjectProperty *prop = AMF_GetProp(obj, NULL, n);
+        AMFObjectProperty *prop = AMF_GetProp(obj, NULL, n);
 
-      if (prop->p_name.av_len > name->av_len &&
-      	  !memcmp(prop->p_name.av_val, name->av_val, name->av_len))
-	{
-	  memcpy(p, prop, sizeof(*prop));
-	  return TRUE;
-	}
+        if (prop->p_name.av_len > name->av_len &&
+            !memcmp(prop->p_name.av_val, name->av_val, name->av_len))
+        {
+            *p = *prop;
+            return TRUE;
+        }
 
-      if (prop->p_type == AMF_OBJECT)
-	{
-	  if (RTMP_FindPrefixProperty(&prop->p_vu.p_object, name, p))
-	    return TRUE;
-	}
+        if (prop->p_type == AMF_OBJECT)
+        {
+            if (RTMP_FindPrefixProperty(&prop->p_vu.p_object, name, p))
+                return TRUE;
+        }
     }
   return FALSE;
 }

@@ -1119,19 +1119,19 @@ AMF_CountProp(AMFObject *obj)
 AMFObjectProperty *
 AMF_GetProp(AMFObject *obj, const AVal *name, int nIndex)
 {
-  if (nIndex >= 0)
+    if (nIndex >= 0)
     {
-      if (nIndex < obj->o_num)
-	return &obj->o_props[nIndex];
+        if (nIndex <= obj->o_num)
+            return &obj->o_props[nIndex];
     }
-  else
+    else
     {
-      int n;
-      for (n = 0; n < obj->o_num; n++)
-	{
-	  if (AVMATCH(&obj->o_props[n].p_name, name))
-	    return &obj->o_props[n];
-	}
+        int n;
+        for (n = 0; n < obj->o_num; n++)
+        {
+            if (AVMATCH(&obj->o_props[n].p_name, name))
+                return &obj->o_props[n];
+        }
     }
 
   return (AMFObjectProperty *)&AMFProp_Invalid;
