@@ -130,7 +130,7 @@ static int clk_tck;
 uint32_t
 RTMP_GetTime()
 {
-#ifdef _DEBUG
+#ifdef _DEBUG_RTMP
   return 0;
 #elif defined(_WIN32)
   return timeGetTime();
@@ -1077,21 +1077,21 @@ RTMP_GetNextMediaPacket(RTMP *r, RTMPPacket *packet)
 
       bHasMediaPacket = RTMP_ClientPacket(r, packet);
 
-      if (!bHasMediaPacket)
-	{
-	  RTMPPacket_Free(packet);
-	}
-      else if (r->m_pausing == 3)
-	{
-	  if (packet->m_nTimeStamp <= r->m_mediaStamp)
-	    {
-	      bHasMediaPacket = 0;
-#ifdef _DEBUG
-	      RTMP_Log(RTMP_LOGDEBUG,
-		  "Skipped type: %02X, size: %d, TS: %d ms, abs TS: %d, pause: %d ms",
-		  packet->m_packetType, packet->m_nBodySize,
-		  packet->m_nTimeStamp, packet->m_hasAbsTimestamp,
-		  r->m_mediaStamp);
+		if (!bHasMediaPacket)
+		{
+		  RTMPPacket_Free(packet);
+		}
+		else if (r->m_pausing == 3)
+		{
+			if (packet->m_nTimeStamp <= r->m_mediaStamp)
+			{
+				bHasMediaPacket = 0;
+#ifdef _DEBUG_RTMP
+				RTMP_Log(RTMP_LOGDEBUG,
+				"Skipped type: %02X, size: %d, TS: %d ms, abs TS: %d, pause: %d ms",
+				packet->m_packetType, packet->m_nBodySize,
+				packet->m_nTimeStamp, packet->m_hasAbsTimestamp,
+				r->m_mediaStamp);
 #endif
 	      continue;
 	    }
@@ -1258,7 +1258,7 @@ RTMP_ClientPacket(RTMP *r, RTMPPacket *packet)
     default:
       RTMP_Log(RTMP_LOGDEBUG, "%s, unknown packet type received: 0x%02x", __FUNCTION__,
 	  packet->m_packetType);
-#ifdef _DEBUG
+#ifdef _DEBUG_RTMP
       RTMP_LogHex(RTMP_LOGDEBUG, packet->m_body, packet->m_nBodySize);
 #endif
     }
@@ -1266,9 +1266,9 @@ RTMP_ClientPacket(RTMP *r, RTMPPacket *packet)
   return bHasMediaPacket;
 }
 
-#ifdef _DEBUG
-extern FILE *netstackdump;
-extern FILE *netstackdump_read;
+#ifdef _DEBUG_RTMP
+//extern FILE *netstackdump;
+//extern FILE *netstackdump_read;
 #endif
 
 static int
@@ -1280,7 +1280,7 @@ ReadN(RTMP *r, char *buffer, int n)
 
   r->m_sb.sb_timedout = FALSE;
 
-#ifdef _DEBUG
+#ifdef _DEBUG_RTMP
   memset(buffer, 0, n);
 #endif
 
@@ -1344,8 +1344,8 @@ ReadN(RTMP *r, char *buffer, int n)
 	        return FALSE;
 	}
       /*RTMP_Log(RTMP_LOGDEBUG, "%s: %d bytes\n", __FUNCTION__, nBytes); */
-#ifdef _DEBUG
-      fwrite(ptr, 1, nBytes, netstackdump_read);
+#ifdef _DEBUG_RTMP
+      //fwrite(ptr, 1, nBytes, netstackdump_read);
 #endif
 
       if (nBytes == 0)
@@ -3114,7 +3114,7 @@ HandShake(RTMP *r, int FP9HandShake)
 
   memset(&clientsig[4], 0, 4);
 
-#ifdef _DEBUG
+#ifdef _DEBUG_RTMP
   for (i = 8; i < RTMP_SIG_SIZE; i++)
     clientsig[i] = 0xff;
 #else
@@ -3186,7 +3186,7 @@ SHandShake(RTMP *r)
   memcpy(serversig, &uptime, 4);
 
   memset(&serversig[4], 0, 4);
-#ifdef _DEBUG
+#ifdef _DEBUG_RTMP
   for (i = 8; i < RTMP_SIG_SIZE; i++)
     serversig[i] = 0xff;
 #else
@@ -3356,9 +3356,11 @@ RTMP_SendPacket(RTMP *r, RTMPPacket *packet, int queue)
   nSize = packet->m_nBodySize;
   buffer = packet->m_body;
   nChunkSize = r->m_outChunkSize;
-
-  RTMP_Log(RTMP_LOGDEBUG2, "%s: fd=%d, size=%d", __FUNCTION__, r->m_sb.sb_socket,
-      nSize);
+#ifdef _DEBUG_RTMP
+  /*RTMP_Log(RTMP_LOGDEBUG2, "%s: fd=%d, size=%d", __FUNCTION__, r->m_sb.sb_socket,
+      nSize);*/
+  printf("fd=%d, size=%d",r->m_sb.sb_socket,nSize);
+#endif
   /* send all chunks in one HTTP request */
   if (r->Link.protocol & RTMP_FEATURE_HTTP)
     {
@@ -3603,8 +3605,8 @@ RTMPSockBuf_Send(RTMPSockBuf *sb, const char *buf, int len)
 {
   int rc;
 
-#ifdef _DEBUG
-  fwrite(buf, 1, len, netstackdump);
+#ifdef _DEBUG_RTMP
+  //fwrite(buf, 1, len, netstackdump);
 #endif
 
 #if defined(CRYPTO) && !defined(NO_SSL)
@@ -3838,7 +3840,7 @@ Read_1_Packet(RTMP *r, char *buf, unsigned int buflen)
 	  ret = RTMP_READ_IGNORE;
 	  break;
 	}
-#ifdef _DEBUG
+#ifdef _DEBUG_RTMP
       RTMP_Log(RTMP_LOGDEBUG, "type: %02X, size: %d, TS: %d ms, abs TS: %d",
 	  packet.m_packetType, nPacketLen, packet.m_nTimeStamp,
 	  packet.m_hasAbsTimestamp);
@@ -3929,7 +3931,7 @@ Read_1_Packet(RTMP *r, char *buf, unsigned int buflen)
 			  ts = AMF_DecodeInt24(packetBody + pos + 4);
 			  ts |= (packetBody[pos + 7] << 24);
 
-#ifdef _DEBUG
+#ifdef _DEBUG_RTMP
 			  RTMP_Log(RTMP_LOGDEBUG,
 			      "keyframe search: FLV Packet: type %02X, dataSize: %d, timeStamp: %d ms",
 			      packetBody[pos], dataSize, ts);
@@ -4200,7 +4202,7 @@ Read_1_Packet(RTMP *r, char *buf, unsigned int buflen)
 		  prevTagSize =
 		    AMF_DecodeInt32(packetBody + pos + 11 + dataSize);
 
-#ifdef _DEBUG
+#ifdef _DEBUG_RTMP
 		  RTMP_Log(RTMP_LOGDEBUG,
 		      "FLV Packet: type %02X, dataSize: %lu, tagSize: %lu, timeStamp: %lu ms",
 		      (unsigned char)packetBody[pos], dataSize, prevTagSize,
@@ -4209,7 +4211,7 @@ Read_1_Packet(RTMP *r, char *buf, unsigned int buflen)
 
 		  if (prevTagSize != (dataSize + 11))
 		    {
-#ifdef _DEBUG
+#ifdef _DEBUG_RTMP
 		      RTMP_Log(RTMP_LOGWARNING,
 			  "Tag and data size are not consitent, writing tag size according to dataSize+11: %d",
 			  dataSize + 11);

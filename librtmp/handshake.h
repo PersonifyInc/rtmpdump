@@ -755,7 +755,7 @@ HandShake(RTMP * r, int FP9HandShake)
     }
 
   /* generate random data */
-#ifdef _DEBUG
+#ifdef _DEBUG_RTMP
   memset(clientsig+8, 0, RTMP_SIG_SIZE-8);
 #else
   ip = (int32_t *)(clientsig+8);
@@ -806,7 +806,7 @@ HandShake(RTMP * r, int FP9HandShake)
 	     SHA256_DIGEST_LENGTH);
     }
 
-#ifdef _DEBUG
+#ifdef _DEBUG_RTMP
   RTMP_Log(RTMP_LOGDEBUG, "Clientsig: ");
   RTMP_LogHex(RTMP_LOGDEBUG, clientsig, RTMP_SIG_SIZE);
 #endif
@@ -837,7 +837,7 @@ HandShake(RTMP * r, int FP9HandShake)
   if (FP9HandShake && type == 3 && !serversig[4])
     FP9HandShake = FALSE;
 
-#ifdef _DEBUG
+#ifdef _DEBUG_RTMP
   RTMP_Log(RTMP_LOGDEBUG, "Server signature:");
   RTMP_LogHex(RTMP_LOGDEBUG, serversig, RTMP_SIG_SIZE);
 #endif
@@ -909,7 +909,7 @@ HandShake(RTMP * r, int FP9HandShake)
 
 
       reply = client2;
-#ifdef _DEBUG
+#ifdef _DEBUG_RTMP
       memset(reply, 0xff, RTMP_SIG_SIZE);
 #else
       ip = (int32_t *)reply;
@@ -960,7 +960,7 @@ HandShake(RTMP * r, int FP9HandShake)
 #endif
     }
 
-#ifdef _DEBUG
+#ifdef _DEBUG_RTMP
   RTMP_Log(RTMP_LOGDEBUG, "%s: Sending handshake response: ",
     __FUNCTION__);
   RTMP_LogHex(RTMP_LOGDEBUG, reply, RTMP_SIG_SIZE);
@@ -972,7 +972,7 @@ HandShake(RTMP * r, int FP9HandShake)
   if (ReadN(r, (char *)serversig, RTMP_SIG_SIZE) != RTMP_SIG_SIZE)
     return FALSE;
 
-#ifdef _DEBUG
+#ifdef _DEBUG_RTMP
   RTMP_Log(RTMP_LOGDEBUG, "%s: 2nd handshake: ", __FUNCTION__);
   RTMP_LogHex(RTMP_LOGDEBUG, serversig, RTMP_SIG_SIZE);
 #endif
@@ -1143,7 +1143,7 @@ SHandShake(RTMP * r)
     }
 
   /* generate random data */
-#ifdef _DEBUG
+#ifdef _DEBUG_RTMP
   memset(serversig+8, 0, RTMP_SIG_SIZE-8);
 #else
   ip = (int32_t *)(serversig+8);
