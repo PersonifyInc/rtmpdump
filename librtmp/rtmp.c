@@ -3359,7 +3359,7 @@ RTMP_SendPacket(RTMP *r, RTMPPacket *packet, int queue)
 #ifdef _DEBUG_RTMP
   /*RTMP_Log(RTMP_LOGDEBUG2, "%s: fd=%d, size=%d", __FUNCTION__, r->m_sb.sb_socket,
       nSize);*/
-  printf("fd=%d, size=%d",r->m_sb.sb_socket,nSize);
+  //printf("fd=%d, size=%d",r->m_sb.sb_socket,nSize);
 #endif
   /* send all chunks in one HTTP request */
   if (r->Link.protocol & RTMP_FEATURE_HTTP)
