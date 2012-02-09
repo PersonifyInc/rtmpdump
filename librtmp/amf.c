@@ -807,7 +807,7 @@ AMFProp_Dump(AMFObjectProperty *prop)
   if (name.av_len > 18)
     name.av_len = 18;
 
-  snprintf(strRes, 255, "Name: %18.*s, ", name.av_len, name.av_val);
+  _snprintf(strRes, 255, "Name: %18.*s, ", name.av_len, name.av_val);
 
   if (prop->p_type == AMF_OBJECT)
     {
@@ -819,22 +819,22 @@ AMFProp_Dump(AMFObjectProperty *prop)
   switch (prop->p_type)
     {
     case AMF_NUMBER:
-      snprintf(str, 255, "NUMBER:\t%.2f", prop->p_vu.p_number);
+      _snprintf(str, 255, "NUMBER:\t%.2f", prop->p_vu.p_number);
       break;
     case AMF_BOOLEAN:
-      snprintf(str, 255, "BOOLEAN:\t%s",
+      _snprintf(str, 255, "BOOLEAN:\t%s",
 	       prop->p_vu.p_number != 0.0 ? "TRUE" : "FALSE");
       break;
     case AMF_STRING:
-      snprintf(str, 255, "STRING:\t%.*s", prop->p_vu.p_aval.av_len,
+      _snprintf(str, 255, "STRING:\t%.*s", prop->p_vu.p_aval.av_len,
 	       prop->p_vu.p_aval.av_val);
       break;
     case AMF_DATE:
-      snprintf(str, 255, "DATE:\ttimestamp: %.2f, UTC offset: %d",
+      _snprintf(str, 255, "DATE:\ttimestamp: %.2f, UTC offset: %d",
 	       prop->p_vu.p_number, prop->p_UTCoffset);
       break;
     default:
-      snprintf(str, 255, "INVALID TYPE 0x%02x", (unsigned char)prop->p_type);
+      _snprintf(str, 255, "INVALID TYPE 0x%02x", (unsigned char)prop->p_type);
     }
 
   RTMP_Log(RTMP_LOGDEBUG, "Property: <%s%s>", strRes, str);
@@ -1119,19 +1119,19 @@ AMF_CountProp(AMFObject *obj)
 AMFObjectProperty *
 AMF_GetProp(AMFObject *obj, const AVal *name, int nIndex)
 {
-    if (nIndex >= 0)
+  if (nIndex >= 0)
     {
-        if (nIndex <= obj->o_num)
-            return &obj->o_props[nIndex];
+      if (nIndex <= obj->o_num)
+	return &obj->o_props[nIndex];
     }
-    else
+  else
     {
-        int n;
-        for (n = 0; n < obj->o_num; n++)
-        {
-            if (AVMATCH(&obj->o_props[n].p_name, name))
-                return &obj->o_props[n];
-        }
+      int n;
+      for (n = 0; n < obj->o_num; n++)
+	{
+	  if (AVMATCH(&obj->o_props[n].p_name, name))
+	    return &obj->o_props[n];
+	}
     }
 
   return (AMFObjectProperty *)&AMFProp_Invalid;
