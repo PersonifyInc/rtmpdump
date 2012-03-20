@@ -3734,22 +3734,24 @@ HTTP_read(RTMP *r, int fill)
 
   if (fill)
     RTMPSockBuf_Fill(&r->m_sb);
-  if (r->m_sb.sb_size < 144)
-    return -2;
-  if (strncmp(r->m_sb.sb_start, "HTTP/1.1 200 ", 13))
-    return -1;
-  ptr = r->m_sb.sb_start + sizeof("HTTP/1.1 200");
-  while ((ptr = strstr(ptr, "Content-"))) {
-    if (!strncasecmp(ptr+8, "length:", 7)) break;
-    ptr += 8;
-  }
-  if (!ptr)
-    return -1;
-  hlen = atoi(ptr+16);
-  ptr = strstr(ptr+16, "\r\n\r\n");
-  if (!ptr)
-    return -1;
-  ptr += 4;
+
+  do {
+      if (r->m_sb.sb_size < 144)
+        return -1;
+      if (strncmp(r->m_sb.sb_start, "HTTP/1.1 200 ", 13))
+        return -1;
+      ptr = strstr(r->m_sb.sb_start, "Content-Length:");
+      if (!ptr)
+        return -1;
+      hlen = atoi(ptr+16);
+      ptr = strstr(ptr, "\r\n\r\n");
+      if (!ptr)
+        return -1;
+      ptr += 4;
+  } while ( (r->m_sb.sb_size - (ptr - r->m_sb.sb_start) < hlen) &&
+            (r->m_sb.sb_timedout == FALSE) &&
+            RTMPSockBuf_Fill(&r->m_sb)  );
+
   r->m_sb.sb_size -= ptr - r->m_sb.sb_start;
   r->m_sb.sb_start = ptr;
   r->m_unackd--;
