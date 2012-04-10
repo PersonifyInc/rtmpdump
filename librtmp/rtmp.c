@@ -1367,6 +1367,24 @@ ReadN(RTMP *r, char *buffer, int n)
   return nOriginalSize - n;
 }
 
+static char g_packetBuffer[1024*1024];
+static int g_packetBufferLen = 0;
+
+static int
+CollectN(const char *buffer, int n)
+{
+  const char *ptr = buffer;
+
+  if (g_packetBufferLen + n < 1024*1024)
+  {
+    memcpy(g_packetBuffer + g_packetBufferLen, ptr, n);
+    g_packetBufferLen += n;
+    return TRUE;
+  }
+
+  return FALSE;
+}
+
 static int
 WriteN(RTMP *r, const char *buffer, int n)
 {
@@ -1452,7 +1470,7 @@ SendConnectPacket(RTMP *r, RTMPPacket *cp)
   char *enc;
 
   if (cp)
-    return RTMP_SendPacket(r, cp, TRUE);
+    return RTMP_SendPacket(r, cp, TRUE, FALSE);
 
   packet.m_nChannel = 0x03;	/* control channel (invoke) */
   packet.m_headerType = RTMP_PACKET_SIZE_LARGE;
@@ -1552,7 +1570,7 @@ SendConnectPacket(RTMP *r, RTMPPacket *cp)
     }
   packet.m_nBodySize = enc - packet.m_body;
 
-  return RTMP_SendPacket(r, &packet, TRUE);
+  return RTMP_SendPacket(r, &packet, TRUE, FALSE);
 }
 
 #if 0				/* unused */
@@ -1584,7 +1602,7 @@ SendBGHasStream(RTMP *r, double dId, AVal *playpath)
 
   packet.m_nBodySize = enc - packet.m_body;
 
-  return RTMP_SendPacket(r, &packet, TRUE);
+  return RTMP_SendPacket(r, &packet, TRUE, FALSE);
 }
 #endif
 
@@ -1612,7 +1630,7 @@ RTMP_SendCreateStream(RTMP *r)
 
   packet.m_nBodySize = enc - packet.m_body;
 
-  return RTMP_SendPacket(r, &packet, TRUE);
+  return RTMP_SendPacket(r, &packet, TRUE, FALSE);
 }
 
 SAVC(FCSubscribe);
@@ -1643,7 +1661,7 @@ SendFCSubscribe(RTMP *r, AVal *subscribepath)
 
   packet.m_nBodySize = enc - packet.m_body;
 
-  return RTMP_SendPacket(r, &packet, TRUE);
+  return RTMP_SendPacket(r, &packet, TRUE, FALSE);
 }
 
 /* Justin.tv specific authentication */
@@ -1706,7 +1724,7 @@ SendReleaseStream(RTMP *r)
 
   packet.m_nBodySize = enc - packet.m_body;
 
-  return RTMP_SendPacket(r, &packet, FALSE);
+  return RTMP_SendPacket(r, &packet, FALSE, FALSE);
 }
 
 SAVC(FCPublish);
@@ -1736,7 +1754,7 @@ SendFCPublish(RTMP *r)
 
   packet.m_nBodySize = enc - packet.m_body;
 
-  return RTMP_SendPacket(r, &packet, FALSE);
+  return RTMP_SendPacket(r, &packet, FALSE, FALSE);
 }
 
 SAVC(FCUnpublish);
@@ -1766,7 +1784,7 @@ SendFCUnpublish(RTMP *r)
 
   packet.m_nBodySize = enc - packet.m_body;
 
-  return RTMP_SendPacket(r, &packet, FALSE);
+  return RTMP_SendPacket(r, &packet, FALSE, FALSE);
 }
 
 SAVC(publish);
@@ -1803,7 +1821,7 @@ SendPublish(RTMP *r)
 
   packet.m_nBodySize = enc - packet.m_body;
 
-  return RTMP_SendPacket(r, &packet, TRUE);
+  return RTMP_SendPacket(r, &packet, TRUE, FALSE);
 }
 
 SAVC(deleteStream);
@@ -1832,7 +1850,7 @@ SendDeleteStream(RTMP *r, double dStreamId)
   packet.m_nBodySize = enc - packet.m_body;
 
   /* no response expected */
-  return RTMP_SendPacket(r, &packet, FALSE);
+  return RTMP_SendPacket(r, &packet, FALSE, FALSE);
 }
 
 SAVC(pause);
@@ -1862,7 +1880,7 @@ RTMP_SendPause(RTMP *r, int DoPause, int iTime)
   packet.m_nBodySize = enc - packet.m_body;
 
   RTMP_Log(RTMP_LOGDEBUG, "%s, %d, pauseTime=%d", __FUNCTION__, DoPause, iTime);
-  return RTMP_SendPacket(r, &packet, TRUE);
+  return RTMP_SendPacket(r, &packet, TRUE, FALSE);
 }
 
 int RTMP_Pause(RTMP *r, int DoPause)
@@ -1900,7 +1918,7 @@ RTMP_SendSeek(RTMP *r, int iTime)
   r->m_read.flags |= RTMP_READ_SEEKING;
   r->m_read.nResumeTS = 0;
 
-  return RTMP_SendPacket(r, &packet, TRUE);
+  return RTMP_SendPacket(r, &packet, TRUE, FALSE);
 }
 
 int
@@ -1920,7 +1938,7 @@ RTMP_SendServerBW(RTMP *r)
   packet.m_nBodySize = 4;
 
   AMF_EncodeInt32(packet.m_body, pend, r->m_nServerBW);
-  return RTMP_SendPacket(r, &packet, FALSE);
+  return RTMP_SendPacket(r, &packet, FALSE, FALSE);
 }
 
 int
@@ -1941,7 +1959,7 @@ RTMP_SendClientBW(RTMP *r)
 
   AMF_EncodeInt32(packet.m_body, pend, r->m_nClientBW);
   packet.m_body[4] = r->m_nClientBW2;
-  return RTMP_SendPacket(r, &packet, FALSE);
+  return RTMP_SendPacket(r, &packet, FALSE, FALSE);
 }
 
 static int
@@ -1964,7 +1982,7 @@ SendBytesReceived(RTMP *r)
   r->m_nBytesInSent = r->m_nBytesIn;
 
   /*RTMP_Log(RTMP_LOGDEBUG, "Send bytes report. 0x%x (%d bytes)", (unsigned int)m_nBytesIn, m_nBytesIn); */
-  return RTMP_SendPacket(r, &packet, FALSE);
+  return RTMP_SendPacket(r, &packet, FALSE, FALSE);
 }
 
 SAVC(_checkbw);
@@ -1992,7 +2010,7 @@ SendCheckBW(RTMP *r)
   packet.m_nBodySize = enc - packet.m_body;
 
   /* triggers _onbwcheck and eventually results in _onbwdone */
-  return RTMP_SendPacket(r, &packet, FALSE);
+  return RTMP_SendPacket(r, &packet, FALSE, FALSE);
 }
 
 SAVC(_result);
@@ -2020,7 +2038,7 @@ SendCheckBWResult(RTMP *r, double txn)
 
   packet.m_nBodySize = enc - packet.m_body;
 
-  return RTMP_SendPacket(r, &packet, FALSE);
+  return RTMP_SendPacket(r, &packet, FALSE, FALSE);
 }
 
 SAVC(ping);
@@ -2048,7 +2066,7 @@ SendPong(RTMP *r, double txn)
 
   packet.m_nBodySize = enc - packet.m_body;
 
-  return RTMP_SendPacket(r, &packet, FALSE);
+  return RTMP_SendPacket(r, &packet, FALSE, FALSE);
 }
 
 SAVC(play);
@@ -2115,7 +2133,7 @@ SendPlay(RTMP *r)
 
   packet.m_nBodySize = enc - packet.m_body;
 
-  return RTMP_SendPacket(r, &packet, TRUE);
+  return RTMP_SendPacket(r, &packet, TRUE, FALSE);
 }
 
 SAVC(set_playlist);
@@ -2156,7 +2174,7 @@ SendPlaylist(RTMP *r)
 
   packet.m_nBodySize = enc - packet.m_body;
 
-  return RTMP_SendPacket(r, &packet, TRUE);
+  return RTMP_SendPacket(r, &packet, TRUE, FALSE);
 }
 
 static int
@@ -2184,7 +2202,7 @@ SendSecureTokenResponse(RTMP *r, AVal *resp)
 
   packet.m_nBodySize = enc - packet.m_body;
 
-  return RTMP_SendPacket(r, &packet, FALSE);
+  return RTMP_SendPacket(r, &packet, FALSE, FALSE);
 }
 
 /*
@@ -2254,7 +2272,7 @@ RTMP_SendCtrl(RTMP *r, short nType, unsigned int nObject, unsigned int nTime)
 	buf = AMF_EncodeInt32(buf, pend, nTime);
     }
 
-  return RTMP_SendPacket(r, &packet, FALSE);
+  return RTMP_SendPacket(r, &packet, FALSE, FALSE);
 }
 
 static void
@@ -3244,8 +3262,9 @@ RTMP_SendChunk(RTMP *r, RTMPChunk *chunk)
 }
 
 int
-RTMP_SendPacket(RTMP *r, RTMPPacket *packet, int queue)
+RTMP_SendPacket(RTMP *r, RTMPPacket *packet, int queue, int collect)
 {
+
   const RTMPPacket *prevPacket = r->m_vecChannelsOut[packet->m_nChannel];
   uint32_t last = 0;
   int nSize;
@@ -3255,6 +3274,10 @@ RTMP_SendPacket(RTMP *r, RTMPPacket *packet, int queue)
   char *buffer, *tbuf = NULL, *toff = NULL;
   int nChunkSize;
   int tlen;
+
+  wchar_t asdf[100];
+    swprintf(asdf, L"RTMP_SendPacket collect %d size %d\n", collect, packet->m_nBodySize);
+    OutputDebugString(asdf);
 
   if (prevPacket && packet->m_headerType != RTMP_PACKET_SIZE_LARGE)
     {
@@ -3381,13 +3404,21 @@ RTMP_SendPacket(RTMP *r, RTMPPacket *packet, int queue)
         {
 	  memcpy(toff, header, nChunkSize + hSize);
 	  toff += nChunkSize + hSize;
-	}
-      else
-        {
-	  wrote = WriteN(r, header, nChunkSize + hSize);
-	  if (!wrote)
-	    return FALSE;
-	}
+    }
+    else
+    {
+        if (collect) {
+            wrote = CollectN(header, nChunkSize + hSize);
+        }
+        else {
+            wrote = CollectN(header, nChunkSize + hSize);
+	        wrote = WriteN(r, g_packetBuffer, g_packetBufferLen);
+            g_packetBufferLen = 0;
+        }
+
+        if (!wrote)
+          return FALSE;
+    }
       nSize -= nChunkSize;
       buffer += nChunkSize;
       hSize = 0;
@@ -3413,7 +3444,16 @@ RTMP_SendPacket(RTMP *r, RTMPPacket *packet, int queue)
     }
   if (tbuf)
     {
-      int wrote = WriteN(r, tbuf, toff-tbuf);
+      int wrote = 0;
+      if (collect) {
+        wrote = CollectN(tbuf, toff-tbuf);
+      }
+      else {
+        wrote = CollectN(tbuf, toff-tbuf);
+	    wrote = WriteN(r, g_packetBuffer, g_packetBufferLen);
+        g_packetBufferLen = 0;
+      }
+      
       free(tbuf);
       tbuf = NULL;
       if (!wrote)
@@ -4381,9 +4421,50 @@ RTMP_Write(RTMP *r, const char *buf, int size)
   RTMPPacket *pkt = &r->m_write;
   char *pend, *enc;
   int s2 = size, ret, num;
+  int s3 = size;
+  int totalSize = 0;
+  const char *buf3 = buf;
 
   pkt->m_nChannel = 0x04;	/* source channel */
   pkt->m_nInfoField2 = r->m_stream_id;
+
+  // 04102012: HACK HACK HACK enumerate the packets here
+  RTMP_Log(RTMP_LOGDEBUG, "%s call", __FUNCTION__);
+  while (s3 > 0)
+  {
+      uint8_t packetType;
+      uint32_t packetSize;
+
+        /* skip the header if it is present */
+		if (buf3[0] == 'F' && buf3[1] == 'L' && buf3[2] == 'V')
+		{
+		  buf3 += 13;
+		  s3 -= 13;
+		}
+
+        /* determine the type and size of the packet */
+        packetType = *buf3++;
+		packetSize = AMF_DecodeInt24(buf3);
+        totalSize += packetSize;
+		buf3 += 3;
+		//pkt->m_nTimeStamp = AMF_DecodeInt24(buf3);
+		buf3 += 3;
+		//pkt->m_nTimeStamp |= *buf3++ << 24;
+        buf3 ++;
+		buf3 += 3;
+		s3 -= 11;
+
+        RTMP_Log(RTMP_LOGDEBUG, "%s, packet type %X, size %d", __FUNCTION__, packetType, packetSize);
+
+        /* skip ahead size of packet */
+        buf3 += packetSize;
+        s3 -= packetSize;
+
+        /* skip 4 bytes at end becuase other code does (padding/header)??? */
+        buf3 += 4;
+		s3 -= 4;
+  }
+  RTMP_Log(RTMP_LOGDEBUG, "%s, TOTAL size: %d", __FUNCTION__, totalSize);
 
   while (s2)
     {
@@ -4448,15 +4529,21 @@ RTMP_Write(RTMP *r, const char *buf, int size)
       buf += num;
       if (pkt->m_nBytesRead == pkt->m_nBodySize)
 	{
-	  ret = RTMP_SendPacket(r, pkt, FALSE);
-	  RTMPPacket_Free(pkt);
-	  pkt->m_nBytesRead = 0;
-	  if (!ret)
-	    return -1;
-	  buf += 4;
-	  s2 -= 4;
-	  if (s2 < 0)
-	    break;
+        // TODO: fix this
+        if ((s2-4)<0) { // if (last time through)
+            ret = RTMP_SendPacket(r, pkt, FALSE, FALSE);
+        }
+        else {
+            ret = RTMP_SendPacket(r, pkt, FALSE, TRUE);
+        }
+		RTMPPacket_Free(pkt);
+		pkt->m_nBytesRead = 0;
+		if (!ret)
+			return -1;
+		buf += 4;
+		s2 -= 4;
+		if (s2 < 0)
+			break;
 	}
     }
   return size+s2;
