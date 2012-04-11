@@ -274,6 +274,7 @@ extern "C"
     RTMP_READ m_read;
     RTMPPacket m_write;
     RTMPSockBuf m_sb;
+    BOOL m_fPublishing;
     RTMP_LNK Link;
 
     RTMP_INVOCATION_HANDLER userHandler;
@@ -317,6 +318,7 @@ extern "C"
   int RTMP_SendPacket(RTMP *r, RTMPPacket *packet, int queue, int collect);
   int RTMP_SendChunk(RTMP *r, RTMPChunk *chunk);
   int RTMP_IsConnected(RTMP *r);
+  int RTMP_IsPublishing(RTMP *r);
   int RTMP_Socket(RTMP *r);
   int RTMP_IsTimedout(RTMP *r);
   double RTMP_GetDuration(RTMP *r);

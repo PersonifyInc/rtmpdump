@@ -50,6 +50,9 @@ static const int packetSize[] = { 12, 8, 4, 1 };
 
 int RTMP_ctrlC;
 
+// Counter of RTMPT idle packets that will be sent
+static int first_time_idle = 10;
+
 const char RTMPProtocolStrings[][7] = {
   "RTMP",
   "RTMPT",
@@ -249,6 +252,7 @@ RTMP_Init(RTMP *r)
 
   memset(r, 0, sizeof(RTMP));
   r->m_sb.sb_socket = -1;
+  r->m_fPublishing = FALSE;
   r->m_inChunkSize = RTMP_DEFAULT_CHUNKSIZE;
   r->m_outChunkSize = RTMP_DEFAULT_CHUNKSIZE;
   r->m_nBufferMS = 30000;
@@ -261,6 +265,8 @@ RTMP_Init(RTMP *r)
   r->Link.swfAge = 30;
   r->userHandler = NULL;
   r->userHandlerCtx = NULL;
+
+  first_time_idle = 10;
 }
 
 void
@@ -279,6 +285,12 @@ int
 RTMP_IsConnected(RTMP *r)
 {
   return r->m_sb.sb_socket != -1;
+}
+
+int
+RTMP_IsPublishing(RTMP *r)
+{
+    return r->m_fPublishing == TRUE;
 }
 
 int
@@ -2437,6 +2449,7 @@ HandleInvoke(RTMP *r, const char *body, unsigned int nBodySize)
           if (r->Link.protocol & RTMP_FEATURE_WRITE)
           {
               SendPublish(r);
+              r->m_fPublishing = TRUE;
           }
           else
           {
@@ -3275,9 +3288,9 @@ RTMP_SendPacket(RTMP *r, RTMPPacket *packet, int queue, int collect)
   int nChunkSize;
   int tlen;
 
-  wchar_t asdf[100];
-    swprintf(asdf, L"RTMP_SendPacket collect %d size %d\n", collect, packet->m_nBodySize);
-    OutputDebugString(asdf);
+  //wchar_t asdf[100];
+  //  swprintf(asdf, L"RTMP_SendPacket collect %d size %d\n", collect, packet->m_nBodySize);
+  //  OutputDebugString(asdf);
 
   if (prevPacket && packet->m_headerType != RTMP_PACKET_SIZE_LARGE)
     {
