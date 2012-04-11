@@ -3748,7 +3748,8 @@ static int
 HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
 {
   char hbuf[512];
-  int hlen = snprintf(hbuf, sizeof(hbuf), "POST /%s%s/%d HTTP/1.1\r\n"
+
+  int hlen = sprintf(hbuf, "POST /%s%s/%d HTTP/1.1\r\n"
     "Host: %.*s:%d\r\n"
     "Accept: */*\r\n"
     "User-Agent: Shockwave Flash\n"
@@ -3759,6 +3760,15 @@ HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
     r->m_clientID.av_val ? r->m_clientID.av_val : "",
     r->m_msgCounter, r->Link.hostname.av_len, r->Link.hostname.av_val,
     r->Link.port, len);
+
+  RTMP_Log(RTMP_LOGDEBUG, "%s, acked count: %d.",
+    __FUNCTION__, r->m_unackd);
+  // HACK HACK HACK -- horrible idea. Just wait around a bit until we can send again.
+  //while (r->m_unackd > 4)
+  //{
+  //    Sleep(100);
+  //}
+
   RTMPSockBuf_Send(&r->m_sb, hbuf, hlen);
   hlen = RTMPSockBuf_Send(&r->m_sb, buf, len);
   r->m_msgCounter++;
@@ -4529,8 +4539,18 @@ RTMP_Write(RTMP *r, const char *buf, int size)
       buf += num;
       if (pkt->m_nBytesRead == pkt->m_nBodySize)
 	{
+        int pipeline_full = FALSE;
+
+        // Pipeline condition check
+        // Do we need to not send yet?
+        if (r->m_unackd > 4)
+        {
+            pipeline_full = TRUE;
+            RTMP_Log(RTMP_LOGDEBUG, "%s, not sending -- HTTP pipeline is full", __FUNCTION__);
+        }
+
         // TODO: fix this
-        if ((s2-4)<0) { // if (last time through)
+        if (pipeline_full == FALSE && (s2-4)<0) { // if (last time through)
             ret = RTMP_SendPacket(r, pkt, FALSE, FALSE);
         }
         else {
