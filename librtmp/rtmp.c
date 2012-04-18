@@ -50,9 +50,6 @@ static const int packetSize[] = { 12, 8, 4, 1 };
 
 int RTMP_ctrlC;
 
-// Counter of RTMPT idle packets that will be sent
-static int first_time_idle = 10;
-
 const char RTMPProtocolStrings[][7] = {
   "RTMP",
   "RTMPT",
@@ -265,8 +262,6 @@ RTMP_Init(RTMP *r)
   r->Link.swfAge = 30;
   r->userHandler = NULL;
   r->userHandlerCtx = NULL;
-
-  first_time_idle = 10;
 }
 
 void
@@ -1304,10 +1299,17 @@ ReadN(RTMP *r, char *buffer, int n)
         {
 	  while (!r->m_resplen)
 	    {
-	      if (r->m_sb.sb_size < 144)
-	        {
-		  if (!r->m_unackd)
-		    HTTP_Post(r, RTMPT_IDLE, "", 1);
+			if (r->m_sb.sb_size < 144)
+			{
+				// only sending idles out when connecting stream
+				if ((!r->m_unackd) && (r->m_bPlaying == FALSE))
+				{					
+						//wchar_t asdf[100];
+						//swprintf(asdf, L"send idle out\n");
+						//OutputDebugString(asdf);
+						HTTP_Post(r, RTMPT_IDLE, "", 1);
+					
+				}
 		  if (RTMPSockBuf_Fill(&r->m_sb) < 1)
 		    {
 		      if (!r->m_sb.sb_timedout)
