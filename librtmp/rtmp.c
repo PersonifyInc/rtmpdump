@@ -2450,8 +2450,7 @@ HandleInvoke(RTMP *r, const char *body, unsigned int nBodySize)
 
           if (r->Link.protocol & RTMP_FEATURE_WRITE)
           {
-              SendPublish(r);
-              r->m_fPublishing = TRUE;
+              SendPublish(r);              
           }
           else
           {
@@ -2546,6 +2545,7 @@ HandleInvoke(RTMP *r, const char *body, unsigned int nBodySize)
       else if (AVMATCH(&code, &av_NetStream_Publish_Start))
       {
           int i;
+		  r->m_fPublishing = TRUE;
           r->m_bPlaying = TRUE;
           for (i = 0; i < r->m_numCalls; i++)
           {
