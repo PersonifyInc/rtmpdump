@@ -115,7 +115,7 @@ extern "C"
 
   void AMF_AddProp(AMFObject * obj, const AMFObjectProperty * prop);
   int AMF_CountProp(AMFObject * obj);
-  AMFObjectProperty *AMF_GetProp(AMFObject * obj, const AVal * name,
+  LIBRTMP_API AMFObjectProperty *AMF_GetProp(AMFObject * obj, const AVal * name,
 				 int nIndex);
 
   AMFDataType AMFProp_GetType(AMFObjectProperty * prop);
@@ -128,7 +128,7 @@ extern "C"
   void AMFProp_SetName(AMFObjectProperty * prop, AVal * name);
   double AMFProp_GetNumber(AMFObjectProperty * prop);
   int AMFProp_GetBoolean(AMFObjectProperty * prop);
-  void AMFProp_GetString(AMFObjectProperty * prop, AVal * str);
+  void LIBRTMP_API AMFProp_GetString(AMFObjectProperty * prop, AVal * str);
   void AMFProp_GetObject(AMFObjectProperty * prop, AMFObject * obj);
 
   int AMFProp_IsValid(AMFObjectProperty * prop);
