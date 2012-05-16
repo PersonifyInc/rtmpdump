@@ -1278,107 +1278,148 @@ RTMP_ClientPacket(RTMP *r, RTMPPacket *packet)
 //extern FILE *netstackdump_read;
 #endif
 
+static void RestartSocketConnection(RTMP *r)
+{
+    struct sockaddr_in service;
+
+    // Before restarting, ensure that we get all responses
+    RTMP_Log(RTMP_LOGINFO, "+RestartSocketConnection");
+    while (r->m_sb.sb_http_req > r->m_sb.sb_http_resp) {
+        Sleep(50);
+    }
+    RTMP_Log(RTMP_LOGINFO, "RestartSocketConnection: all responses received, restarting.");
+
+    r->m_sb.sb_restarting = TRUE;
+    RTMPSockBuf_Close(&r->m_sb);
+    
+    /* Connect directly, TODO: socks proxy support */
+    memset(&service, 0, sizeof(struct sockaddr_in));
+    service.sin_family = AF_INET;
+    add_addr_info(&service, &r->Link.hostname, r->Link.port);
+    RTMP_Connect0(r, (struct sockaddr *)&service);
+
+    r->m_sb.sb_restarting = FALSE;
+    // HACK HACK HACK --reduce message counters, pipeline count
+    //r->m_msgCounter-=2;
+    //r->m_unackd = 0;
+}
+
 static int
 ReadN(RTMP *r, char *buffer, int n)
 {
-  int nOriginalSize = n;
-  int avail;
-  char *ptr;
+    int nOriginalSize = n;
+    int nSockBufRead = 0;
+    int avail;
+    char *ptr;
 
-  r->m_sb.sb_timedout = FALSE;
+    r->m_sb.sb_timedout = FALSE;
 
 #ifdef _DEBUG_RTMP
-  memset(buffer, 0, n);
+    memset(buffer, 0, n);
 #endif
 
-  ptr = buffer;
-  while (n > 0)
+    ptr = buffer;
+    while (n > 0)
     {
-      int nBytes = 0, nRead;
-      if (r->Link.protocol & RTMP_FEATURE_HTTP)
+        int nBytes = 0, nRead;
+        if (r->Link.protocol & RTMP_FEATURE_HTTP)
         {
-	  while (!r->m_resplen)
-	    {
-			if (r->m_sb.sb_size < 144)
-			{
-				// only sending idles out when connecting stream
-				if ((!r->m_unackd) && (r->m_bPlaying == FALSE))
-				{					
-						//wchar_t asdf[100];
-						//swprintf(asdf, L"send idle out\n");
-						//OutputDebugString(asdf);
-						HTTP_Post(r, RTMPT_IDLE, "", 1);
-					
-				}
-		  if (RTMPSockBuf_Fill(&r->m_sb) < 1)
-		    {
-		      if (!r->m_sb.sb_timedout)
-		        RTMP_Close(r);
-		      return 0;
-		    }
-		}
-	      HTTP_read(r, 0);
-	    }
-	  if (r->m_resplen && !r->m_sb.sb_size)
-	    RTMPSockBuf_Fill(&r->m_sb);
-          avail = r->m_sb.sb_size;
-	  if (avail > r->m_resplen)
-	    avail = r->m_resplen;
-	}
-      else
+            while (!r->m_resplen)
+            {
+                if (r->m_sb.sb_size < 144)
+                {
+                    // only sending idles out when connecting stream
+                    if ((!r->m_unackd) && (r->m_bPlaying == FALSE))
+                    {					
+                        //wchar_t asdf[100];
+                        //swprintf(asdf, L"send idle out\n");
+                        //OutputDebugString(asdf);
+                        HTTP_Post(r, RTMPT_IDLE, "", 1);
+
+                    }
+                    nSockBufRead = RTMPSockBuf_Fill(&r->m_sb);
+                    //if (nSockBufRead == 0) {
+                    //    // Graceful socket release. This is likely a HTTP proxy 
+                    //    // timing out, or similar.  Since the [tunneled] RTMP connection
+                    //    // is still alive, we try to reestablish the connection here...
+                    //    RTMP_Log(RTMP_LOGINFO, "%s, RTMP socket closed by peer, attempting to reestablish", __FUNCTION__);
+
+                    //    // Bounce the socket connection
+                    //    RestartSocketConnection(r);
+
+                    //    continue;
+                    //}
+                    /*else*/ if (nSockBufRead < 1)
+                    {
+                        if (!r->m_sb.sb_timedout && !r->m_sb.sb_restarting)
+                            RTMP_Close(r);
+                        if (!r->m_sb.sb_restarting) {
+                            return 0;
+                        }
+                    }
+                }
+                HTTP_read(r, 0);
+            }
+            if (r->m_resplen && !r->m_sb.sb_size)
+                RTMPSockBuf_Fill(&r->m_sb);
+            avail = r->m_sb.sb_size;
+            if (avail > r->m_resplen)
+                avail = r->m_resplen;
+        }
+        else
         {
-          avail = r->m_sb.sb_size;
-	  if (avail == 0)
-	    {
-	      if (RTMPSockBuf_Fill(&r->m_sb) < 1)
-	        {
-	          if (!r->m_sb.sb_timedout)
-	            RTMP_Close(r);
-	          return 0;
-		}
-	      avail = r->m_sb.sb_size;
-	    }
-	}
-      nRead = ((n < avail) ? n : avail);
-      if (nRead > 0)
-	{
-	  memcpy(ptr, r->m_sb.sb_start, nRead);
-	  r->m_sb.sb_start += nRead;
-	  r->m_sb.sb_size -= nRead;
-	  nBytes = nRead;
-	  r->m_nBytesIn += nRead;
-	  if (r->m_bSendCounter
-	      && r->m_nBytesIn > r->m_nBytesInSent + r->m_nClientBW / 2)
-	    SendBytesReceived(r);
-	}
-      /*RTMP_Log(RTMP_LOGDEBUG, "%s: %d bytes\n", __FUNCTION__, nBytes); */
+            avail = r->m_sb.sb_size;
+            if (avail == 0)
+            {
+                if (RTMPSockBuf_Fill(&r->m_sb) < 1)
+                {
+                    if (!r->m_sb.sb_timedout)
+                        RTMP_Close(r);
+                    return 0;
+                }
+                avail = r->m_sb.sb_size;
+            }
+        }
+        nRead = ((n < avail) ? n : avail);
+        if (nRead > 0)
+        {
+            memcpy(ptr, r->m_sb.sb_start, nRead);
+            r->m_sb.sb_start += nRead;
+            r->m_sb.sb_size -= nRead;
+            nBytes = nRead;
+            r->m_nBytesIn += nRead;
+            if (r->m_bSendCounter
+                && r->m_nBytesIn > r->m_nBytesInSent + r->m_nClientBW / 2)
+                SendBytesReceived(r);
+        }
+        /*RTMP_Log(RTMP_LOGDEBUG, "%s: %d bytes\n", __FUNCTION__, nBytes); */
 #ifdef _DEBUG_RTMP
-      //fwrite(ptr, 1, nBytes, netstackdump_read);
+        //fwrite(ptr, 1, nBytes, netstackdump_read);
 #endif
 
-      if (nBytes == 0)
-	{
-	  RTMP_Log(RTMP_LOGDEBUG, "%s, RTMP socket closed by peer", __FUNCTION__);
-	  /*goto again; */
-	  RTMP_Close(r);
-	  break;
-	}
+        if (nBytes == 0)
+        {
+            RTMP_Log(RTMP_LOGDEBUG, "%s, RTMP socket closed by peer", __FUNCTION__);
+            /*goto again; */
+            RTMP_Close(r);
+            break;
+        }
 
-      if (r->Link.protocol & RTMP_FEATURE_HTTP)
-	r->m_resplen -= nBytes;
+        if (r->Link.protocol & RTMP_FEATURE_HTTP)
+            r->m_resplen -= nBytes;
 
 #ifdef CRYPTO
-      if (r->Link.rc4keyIn)
-	{
-	  RC4_encrypt(r->Link.rc4keyIn, nBytes, ptr);
-	}
+        if (r->Link.rc4keyIn)
+        {
+            RC4_encrypt(r->Link.rc4keyIn, nBytes, ptr);
+        }
 #endif
 
-      n -= nBytes;
-      ptr += nBytes;
+        n -= nBytes;
+        ptr += nBytes;
     }
 
-  return nOriginalSize - n;
+    return nOriginalSize - n;
 }
 
 static char g_packetBuffer[1024*1024];
@@ -1433,6 +1474,11 @@ WriteN(RTMP *r, const char *buffer, int n)
 	  int sockerr = GetSockError();
 	  RTMP_Log(RTMP_LOGERROR, "%s, RTMP send error %d (%d bytes)", __FUNCTION__,
 	      sockerr, n);
+
+      if (sockerr == WSAENOTCONN) {
+        RTMP_Log(RTMP_LOGINFO, "%s, RTMP may be reestablishing connection. Will keep trying send.", __FUNCTION__);
+        continue;
+      }
 
 	  if (sockerr == EINTR && !RTMP_ctrlC)
 	    continue;
@@ -3609,6 +3655,8 @@ RTMPSockBuf_Fill(RTMPSockBuf *sb)
 {
   int nBytes;
 
+  RTMP_Log(RTMP_LOGINFO, "+RTMPSockBuf_Fill");
+
   if (!sb->sb_size)
     sb->sb_start = sb->sb_buf;
 
@@ -3634,6 +3682,10 @@ RTMPSockBuf_Fill(RTMPSockBuf *sb)
 	  int sockerr = GetSockError();
 	  RTMP_Log(RTMP_LOGDEBUG, "%s, recv returned %d. GetSockError(): %d (%s)",
 	      __FUNCTION__, nBytes, sockerr, strerror(sockerr));
+      if (sb->sb_restarting) {
+        Sleep(50);
+        continue;
+      }
 	  if (sockerr == EINTR && !RTMP_ctrlC)
 	    continue;
 
@@ -3654,6 +3706,7 @@ RTMPSockBuf_Send(RTMPSockBuf *sb, const char *buf, int len)
 {
   int rc;
 
+  RTMP_Log(RTMP_LOGINFO, "+RTMPSockBuf_Send");
 #ifdef _DEBUG_RTMP
   //fwrite(buf, 1, len, netstackdump);
 #endif
@@ -3776,6 +3829,8 @@ HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
     r->m_msgCounter, r->Link.hostname.av_len, r->Link.hostname.av_val,
     r->Link.port, len);
 
+  RTMP_Log(RTMP_LOGINFO, "+HTTP_Post, num req %d", r->m_sb.sb_http_req);
+
   RTMP_Log(RTMP_LOGDEBUG, "%s, acked count: %d.",
     __FUNCTION__, r->m_unackd);
   // HACK HACK HACK -- horrible idea. Just wait around a bit until we can send again.
@@ -3788,6 +3843,13 @@ HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
   hlen = RTMPSockBuf_Send(&r->m_sb, buf, len);
   r->m_msgCounter++;
   r->m_unackd++;
+  r->m_sb.sb_http_req++;
+
+  // HACK HACK HACK -- restart preemptively
+  if (r->m_msgCounter && (r->m_msgCounter % 90) == 0) {
+    RTMP_Log(RTMP_LOGINFO, "%s, msgCounter %d, restarting connection.", __FUNCTION__, r->m_msgCounter);
+    RestartSocketConnection(r);  
+  }
   return hlen;
 }
 
@@ -3797,6 +3859,8 @@ HTTP_read(RTMP *r, int fill)
   char *ptr;
   int hlen;
 
+  RTMP_Log(RTMP_LOGINFO, "+HTTP_read numResp %d", r->m_sb.sb_http_resp);
+
   if (fill)
     RTMPSockBuf_Fill(&r->m_sb);
 
@@ -3805,6 +3869,16 @@ HTTP_read(RTMP *r, int fill)
         return -1;
       if (strncmp(r->m_sb.sb_start, "HTTP/1.1 200 ", 13))
         return -1;
+      ptr = strstr(r->m_sb.sb_start, "Connection: close");
+      if (ptr) {
+        // Connection is not persisting (proxy shutdown?)
+        // want to flag connection for reset
+        RTMP_Log(RTMP_LOGINFO, "HTTP_read got Connection: close, reconnecting socket.");
+        RestartSocketConnection(r);
+
+        // Right?
+        //return -1;
+      }
       ptr = strstr(r->m_sb.sb_start, "Content-Length:");
       if (!ptr)
         return -1;
@@ -3820,6 +3894,7 @@ HTTP_read(RTMP *r, int fill)
   r->m_sb.sb_size -= ptr - r->m_sb.sb_start;
   r->m_sb.sb_start = ptr;
   r->m_unackd--;
+  r->m_sb.sb_http_resp++;
 
   if (!r->m_clientID.av_val)
     {
