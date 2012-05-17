@@ -32,7 +32,7 @@
 
 #define MAX_PRINT_LEN	2048
 
-RTMP_LogLevel RTMP_debuglevel = RTMP_LOGERROR;
+RTMP_LogLevel RTMP_debuglevel = RTMP_LOGDEBUG;
 
 static int neednl;
 
@@ -48,8 +48,10 @@ static const char *levels[] = {
 static void rtmp_log_default(int level, const char *format, va_list vl)
 {
 	char str[MAX_PRINT_LEN]="";
+    char finalStr[MAX_PRINT_LEN]="";
 
 	vsnprintf(str, MAX_PRINT_LEN-1, format, vl);
+	//printf("%s\n",str);
 
 	/* Filter out 'no-name' */
 	if ( RTMP_debuglevel<RTMP_LOGALL && strstr(str, "no-name" ) != NULL )
@@ -62,7 +64,9 @@ static void rtmp_log_default(int level, const char *format, va_list vl)
 			putc('\n', fmsg);
 			neednl = 0;
 		}
-		fprintf(fmsg, "%s: %s\n", levels[level], str);
+		//fprintf(fmsg, "%s: %s\n", levels[level], str);
+        sprintf(finalStr, "%s: %s\n", levels[level], str);
+        OutputDebugStringA(finalStr);
 #ifdef _DEBUG_RTMP
 		fflush(fmsg);
 #endif
