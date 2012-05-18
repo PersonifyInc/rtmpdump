@@ -130,14 +130,19 @@ extern "C"
 
   typedef struct RTMPSockBuf
   {
+    int sb_active_read_socket; /* 0 for sb_socket, 1 for sb_socket_b */
+    int sb_active_write_socket; /* 0 for sb_socket, 1 for sb_socket_b */
     int sb_socket;
+    int sb_socket_b;
     int sb_size;		/* number of unprocessed bytes in buffer */
     char *sb_start;		/* pointer into sb_pBuffer of next byte to process */
     char sb_buf[RTMP_BUFFER_CACHE_SIZE];	/* data read from socket */
     int sb_timedout;
     int sb_restarting;
     int sb_http_req;
+    int sb_http_req_b;
     int sb_http_resp;
+    int sb_http_resp_b;
     void *sb_ssl;
   } RTMPSockBuf;
 
@@ -356,9 +361,9 @@ extern "C"
   int LIBRTMP_API RTMP_FindFirstMatchingProperty(AMFObject *obj, const AVal *name,
 				      AMFObjectProperty * p);
 
-  int LIBRTMP_API RTMPSockBuf_Fill(RTMPSockBuf *sb);
-  int LIBRTMP_API RTMPSockBuf_Send(RTMPSockBuf *sb, const char *buf, int len);
-  int LIBRTMP_API RTMPSockBuf_Close(RTMPSockBuf *sb);
+  int LIBRTMP_API RTMPSockBuf_Fill(RTMPSockBuf *sb, int useSecondSocket);
+  int LIBRTMP_API RTMPSockBuf_Send(RTMPSockBuf *sb, int useSecondSocket, const char *buf, int len);
+  int LIBRTMP_API RTMPSockBuf_Close(RTMPSockBuf *sb, int useSecondSocket);
 
   int LIBRTMP_API RTMP_SendCreateStream(RTMP *r);
   int LIBRTMP_API RTMP_SendSeek(RTMP *r, int dTime);
