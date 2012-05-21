@@ -1434,8 +1434,11 @@ ReadN(RTMP *r, char *buffer, int n)
                 }
                 HTTP_read(r, 0);
             }
-            if (r->m_resplen && !r->m_sb.sb_size)
-                RTMPSockBuf_Fill(&r->m_sb, r->m_sb.sb_active_read_socket);
+            if (r->m_resplen && !r->m_sb.sb_size) {
+                // Hit the previous socket here -- since HTTP_read will switch
+                RTMP_Log(RTMP_LOGDEBUG, "%s first read didn't get payload. using socket %d\n", __FUNCTION__, r->m_sb.sb_active_read_socket ? 0 : 1);
+                RTMPSockBuf_Fill(&r->m_sb, r->m_sb.sb_active_read_socket ? 0 : 1);
+            }
             avail = r->m_sb.sb_size;
             if (avail > r->m_resplen)
                 avail = r->m_resplen;
@@ -3733,7 +3736,7 @@ RTMPSockBuf_Fill(RTMPSockBuf *sb, int useSecondSocket)
 {
   int nBytes;
 
-  RTMP_Log(RTMP_LOGINFO, "+RTMPSockBuf_Fill active %d", sb->sb_active_read_socket);
+  RTMP_Log(RTMP_LOGINFO, "+RTMPSockBuf_Fill active %d sb_size %d", sb->sb_active_read_socket, sb->sb_size);
 
   if (!sb->sb_size)
     sb->sb_start = sb->sb_buf;
@@ -3749,12 +3752,15 @@ RTMPSockBuf_Fill(RTMPSockBuf *sb, int useSecondSocket)
       else
 #endif
 	{
+        RTMP_Log(RTMP_LOGDEBUG, " RTMPSockBuf_Fill calculated nBytes %d", nBytes);
         if (!useSecondSocket) {
             nBytes = recv(sb->sb_socket, sb->sb_start + sb->sb_size, nBytes, 0);
         }
         else {
             nBytes = recv(sb->sb_socket_b, sb->sb_start + sb->sb_size, nBytes, 0);
         }
+
+        RTMP_Log(RTMP_LOGDEBUG, " RTMPSockBuf_Fill nBytes %d", nBytes);
 	}
       if (nBytes != -1)
 	{
@@ -3774,6 +3780,8 @@ RTMPSockBuf_Fill(RTMPSockBuf *sb, int useSecondSocket)
 
 	  if (sockerr == EWOULDBLOCK || sockerr == EAGAIN)
 	    {
+            RTMP_Log(RTMP_LOGDEBUG, "%s, recv timeout.",
+	      __FUNCTION__);
 	      sb->sb_timedout = TRUE;
 	      nBytes = 0;
 	    }
@@ -3781,6 +3789,7 @@ RTMPSockBuf_Fill(RTMPSockBuf *sb, int useSecondSocket)
       break;
     }
 
+  RTMP_Log(RTMP_LOGINFO, "-RTMPSockBuf_Fill active %d sb_size %d", sb->sb_active_read_socket, sb->sb_size);
   return nBytes;
 }
 
@@ -3962,7 +3971,7 @@ HTTP_read(RTMP *r, int fill)
   char *ptr;
   int hlen;
 
-  RTMP_Log(RTMP_LOGINFO, "+HTTP_read numResp %d numResp_b %d read socket %d", r->m_sb.sb_http_resp, r->m_sb.sb_http_resp_b, r->m_sb.sb_active_read_socket);
+  RTMP_Log(RTMP_LOGINFO, "+HTTP_read numResp %d numResp_b %d read socket %d size %d timeout %d", r->m_sb.sb_http_resp, r->m_sb.sb_http_resp_b, r->m_sb.sb_active_read_socket, r->m_sb.sb_size, r->m_sb.sb_timedout);
 
   if (fill) {
       RTMPSockBuf_Fill(&r->m_sb, r->m_sb.sb_active_read_socket);
@@ -3991,8 +4000,8 @@ HTTP_read(RTMP *r, int fill)
       if (!ptr)
         return -1;
       ptr += 4;
-  } while ( (r->m_sb.sb_size - (ptr - r->m_sb.sb_start) < hlen) &&
-            (r->m_sb.sb_timedout == FALSE) &&
+  } while ( ptr + hlen > r->m_sb.sb_buf + r->m_sb.sb_size /*(r->m_sb.sb_buf + r->m_sb.sb_size - ptr + 1 < hlen)*/ &&
+            /* (r->m_sb.sb_timedout == FALSE) && */
             RTMPSockBuf_Fill(&r->m_sb, r->m_sb.sb_active_read_socket)  );
 
   r->m_sb.sb_size -= ptr - r->m_sb.sb_start;
@@ -4034,6 +4043,9 @@ HTTP_read(RTMP *r, int fill)
       r->m_sb.sb_start++;
       r->m_sb.sb_size--;
     }
+
+  RTMP_Log(RTMP_LOGINFO, "-HTTP_read numResp %d numResp_b %d read socket %d size %d resplen %d timeout %d", r->m_sb.sb_http_resp, r->m_sb.sb_http_resp_b, r->m_sb.sb_active_read_socket, r->m_sb.sb_size, r->m_resplen, r->m_sb.sb_timedout);
+
   return 0;
 }
 
