@@ -28,6 +28,8 @@
 #include <string.h>
 #include <assert.h>
 
+#include <process.h>
+
 #include "rtmp_sys.h"
 #include "log.h"
 
@@ -1339,41 +1341,50 @@ static int StartSocketConnection(RTMP *r, int IsSecondSocket)
     return TRUE;
 }
 
-static void RestartSocketConnection(RTMP *r, int IsSecondSocket)
-{
-    struct sockaddr_in service;
+struct RestartSocketArgs {
+    RTMP *m_r;
+    int m_isSecondSocket;
+};
 
+static struct RestartSocketArgs g_restart_socket_args;
+
+static void RestartSocketHelperThread(void* arg)
+{
+    struct RestartSocketArgs* args = (struct RestartSocketArgs*) arg;
+
+    RTMP_Log(RTMP_LOGINFO, "+%s", __FUNCTION__);
+    
     // Before restarting, ensure that we get all responses
-    RTMP_Log(RTMP_LOGINFO, "+RestartSocketConnection secondSocket %d", IsSecondSocket);
-    if (IsSecondSocket) {
-        while (r->m_sb.sb_http_req_b > r->m_sb.sb_http_resp_b) {
+    RTMP_Log(RTMP_LOGINFO, "+RestartSocketConnection secondSocket %d", args->m_isSecondSocket);
+    if (args->m_isSecondSocket) {
+        while (args->m_r->m_sb.sb_http_req_b > args->m_r->m_sb.sb_http_resp_b) {
             Sleep(50);
         }
     }
     else {
-        while (r->m_sb.sb_http_req > r->m_sb.sb_http_resp) {
+        while (args->m_r->m_sb.sb_http_req > args->m_r->m_sb.sb_http_resp) {
             Sleep(50);
         }
     }
     RTMP_Log(RTMP_LOGINFO, "RestartSocketConnection: all responses received, restarting.");
 
-    r->m_sb.sb_restarting = TRUE;
-    RTMPSockBuf_Close(&r->m_sb, IsSecondSocket);
+    args->m_r->m_sb.sb_restarting = TRUE;
+    RTMPSockBuf_Close(&args->m_r->m_sb, args->m_isSecondSocket);
 
     /* Connect directly, TODO: socks proxy support */
-    StartSocketConnection(r, IsSecondSocket);
-    
-    /*
-    memset(&service, 0, sizeof(struct sockaddr_in));
-    service.sin_family = AF_INET;
-    add_addr_info(&service, &r->Link.hostname, r->Link.port);
-    RTMP_Connect0(r, (struct sockaddr *)&service);
-    */
+    StartSocketConnection(args->m_r, args->m_isSecondSocket);
+    args->m_r->m_sb.sb_restarting = FALSE;
 
-    r->m_sb.sb_restarting = FALSE;
-    // HACK HACK HACK --reduce message counters, pipeline count
-    //r->m_msgCounter-=2;
-    //r->m_unackd = 0;
+    RTMP_Log(RTMP_LOGINFO, "-%s", __FUNCTION__);
+}
+
+static void RestartSocketConnection(RTMP *r, int IsSecondSocket)
+{
+    struct sockaddr_in service;
+
+    g_restart_socket_args.m_r = r;
+    g_restart_socket_args.m_isSecondSocket = IsSecondSocket;
+    _beginthread(RestartSocketHelperThread, 0, (void*)&g_restart_socket_args);
 }
 
 static int
@@ -3632,6 +3643,8 @@ RTMP_Close(RTMP *r)
 {
   int i;
 
+  RTMP_Log(RTMP_LOGINFO, "+RTMP_Close");
+
   if (RTMP_IsConnected(r))
     {
       if (r->m_stream_id > 0)
@@ -3949,7 +3962,7 @@ HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
     }
 
   // HACK HACK HACK -- restart preemptively (before proxy terminates us)
-  if (activeSockMsgCount % 90 == 0) {
+  if (activeSockMsgCount % 20 == 0) {
     RTMP_Log(RTMP_LOGINFO, "%s, socketMsgCount %d, restarting connection.", __FUNCTION__, activeSockMsgCount);
     RestartSocketConnection(r, r->m_sb.sb_active_write_socket);  
   }
