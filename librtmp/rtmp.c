@@ -1438,8 +1438,8 @@ ReadN(RTMP *r, char *buffer, int n)
                     {
                         if (!r->m_sb.sb_timedout && !r->m_sb.sb_restarting) {
                             RTMP_Close(r);
-                        }
-                        if (!r->m_sb.sb_restarting) {
+                        //}
+                        //if (!r->m_sb.sb_restarting) {
                             return 0;
                         }
                     }
@@ -3999,6 +3999,9 @@ HTTP_read(RTMP *r, int fill)
       if (strncmp(r->m_sb.sb_start, "HTTP/1.1 200 ", 13)) {
           RTMP_Log(RTMP_LOGINFO, "HTTP_read got non-200 response.  Trying to parse.");
           isNotOk = 1;
+
+          // Handle non-200 response like a timeout.  We want everything to keep running/trying.
+          //r->m_sb.sb_timedout = TRUE;
           //return -1;
       }
 
@@ -4026,6 +4029,7 @@ HTTP_read(RTMP *r, int fill)
 
   r->m_sb.sb_size -= ptr - r->m_sb.sb_start;
   r->m_sb.sb_start = ptr;
+  r->m_unackd--;
 
   if (isNotOk) {
       r->m_resplen = 0;
@@ -4036,8 +4040,6 @@ HTTP_read(RTMP *r, int fill)
       RTMP_Log(RTMP_LOGINFO, "HTTP_read throwing out non-200 response, HTTP resp len %d.  Trying to parse.", hlen);
   } 
   else {
-      r->m_unackd--;
-
       if (r->m_sb.sb_active_read_socket) {
           r->m_sb.sb_http_resp_b++;
       }
