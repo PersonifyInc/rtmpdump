@@ -1436,8 +1436,9 @@ ReadN(RTMP *r, char *buffer, int n)
                     //}
                     /*else*/ if (nSockBufRead < 1)
                     {
-                        if (!r->m_sb.sb_timedout && !r->m_sb.sb_restarting)
+                        if (!r->m_sb.sb_timedout && !r->m_sb.sb_restarting) {
                             RTMP_Close(r);
+                        }
                         if (!r->m_sb.sb_restarting) {
                             return 0;
                         }
@@ -3983,6 +3984,7 @@ HTTP_read(RTMP *r, int fill)
 {
   char *ptr;
   int hlen;
+  int isNotOk = 0;
 
   RTMP_Log(RTMP_LOGINFO, "+HTTP_read numResp %d numResp_b %d read socket %d size %d timeout %d", r->m_sb.sb_http_resp, r->m_sb.sb_http_resp_b, r->m_sb.sb_active_read_socket, r->m_sb.sb_size, r->m_sb.sb_timedout);
 
@@ -3993,8 +3995,13 @@ HTTP_read(RTMP *r, int fill)
   do {
       if (r->m_sb.sb_size < 144)
         return -1;
-      if (strncmp(r->m_sb.sb_start, "HTTP/1.1 200 ", 13))
-        return -1;
+
+      if (strncmp(r->m_sb.sb_start, "HTTP/1.1 200 ", 13)) {
+          RTMP_Log(RTMP_LOGINFO, "HTTP_read got non-200 response.  Trying to parse.");
+          isNotOk = 1;
+          //return -1;
+      }
+
       ptr = strstr(r->m_sb.sb_start, "Connection: close");
       if (ptr) {
         // Connection is not persisting (proxy shutdown?)
@@ -4019,43 +4026,54 @@ HTTP_read(RTMP *r, int fill)
 
   r->m_sb.sb_size -= ptr - r->m_sb.sb_start;
   r->m_sb.sb_start = ptr;
-  r->m_unackd--;
 
-  if (r->m_sb.sb_active_read_socket) {
-      r->m_sb.sb_http_resp_b++;
-  }
+  if (isNotOk) {
+      r->m_resplen = 0;
+      if (hlen > 0) {
+          r->m_sb.sb_start += hlen;
+          r->m_sb.sb_size -= hlen;
+      }
+      RTMP_Log(RTMP_LOGINFO, "HTTP_read throwing out non-200 response, HTTP resp len %d.  Trying to parse.", hlen);
+  } 
   else {
-      r->m_sb.sb_http_resp++;
-  }
+      r->m_unackd--;
 
-  // Flip sockets
-  if (RTMP_IsPublishing(r)) {
-    if (r->m_sb.sb_active_read_socket) {
-        r->m_sb.sb_active_read_socket = 0;
-    }
-    else {
-        r->m_sb.sb_active_read_socket = 1;
-    }
-  }
+      if (r->m_sb.sb_active_read_socket) {
+          r->m_sb.sb_http_resp_b++;
+      }
+      else {
+          r->m_sb.sb_http_resp++;
+      }
 
-  if (!r->m_clientID.av_val)
-    {
-      r->m_clientID.av_len = hlen;
-      r->m_clientID.av_val = malloc(hlen+1);
+      // Flip sockets
+      if (RTMP_IsPublishing(r)) {
+        if (r->m_sb.sb_active_read_socket) {
+            r->m_sb.sb_active_read_socket = 0;
+        }
+        else {
+            r->m_sb.sb_active_read_socket = 1;
+        }
+      }
+
       if (!r->m_clientID.av_val)
-        return -1;
-      r->m_clientID.av_val[0] = '/';
-      memcpy(r->m_clientID.av_val+1, ptr, hlen-1);
-      r->m_clientID.av_val[hlen] = 0;
-      r->m_sb.sb_size = 0;
-    }
-  else
-    {
-      r->m_polling = *ptr++;
-      r->m_resplen = hlen - 1;
-      r->m_sb.sb_start++;
-      r->m_sb.sb_size--;
-    }
+        {
+          r->m_clientID.av_len = hlen;
+          r->m_clientID.av_val = malloc(hlen+1);
+          if (!r->m_clientID.av_val)
+            return -1;
+          r->m_clientID.av_val[0] = '/';
+          memcpy(r->m_clientID.av_val+1, ptr, hlen-1);
+          r->m_clientID.av_val[hlen] = 0;
+          r->m_sb.sb_size = 0;
+        }
+      else
+        {
+          r->m_polling = *ptr++;
+          r->m_resplen = hlen - 1;
+          r->m_sb.sb_start++;
+          r->m_sb.sb_size--;
+        }
+  }
 
   RTMP_Log(RTMP_LOGINFO, "-HTTP_read numResp %d numResp_b %d read socket %d size %d resplen %d timeout %d", r->m_sb.sb_http_resp, r->m_sb.sb_http_resp_b, r->m_sb.sb_active_read_socket, r->m_sb.sb_size, r->m_resplen, r->m_sb.sb_timedout);
 
