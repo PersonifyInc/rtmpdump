@@ -1344,9 +1344,10 @@ static int StartSocketConnection(RTMP *r, int IsSecondSocket)
 struct RestartSocketArgs {
     RTMP *m_r;
     int m_isSecondSocket;
+    unsigned long m_threadId;
 };
 
-static struct RestartSocketArgs g_restart_socket_args;
+static struct RestartSocketArgs g_restart_socket_args = {NULL, 0, -1};
 
 static void RestartSocketHelperThread(void* arg)
 {
@@ -1355,7 +1356,7 @@ static void RestartSocketHelperThread(void* arg)
     RTMP_Log(RTMP_LOGINFO, "+%s", __FUNCTION__);
     
     // Before restarting, ensure that we get all responses
-    RTMP_Log(RTMP_LOGINFO, "+RestartSocketConnection secondSocket %d", args->m_isSecondSocket);
+    RTMP_Log(RTMP_LOGINFO, "+RestartSocketHelperThread secondSocket %d", args->m_isSecondSocket);
     if (args->m_isSecondSocket) {
         while (args->m_r->m_sb.sb_http_req_b > args->m_r->m_sb.sb_http_resp_b) {
             Sleep(50);
@@ -1366,7 +1367,16 @@ static void RestartSocketHelperThread(void* arg)
             Sleep(50);
         }
     }
-    RTMP_Log(RTMP_LOGINFO, "RestartSocketConnection: all responses received, restarting.");
+    RTMP_Log(RTMP_LOGINFO, "RestartSocketHelperThread: all responses received, restarting.");
+
+    if (args->m_isSecondSocket) {
+        args->m_r->m_sb.sb_http_req_b = 0;
+        args->m_r->m_sb.sb_http_resp_b = 0;
+    }
+    else {
+        args->m_r->m_sb.sb_http_req = 0;
+        args->m_r->m_sb.sb_http_resp = 0;
+    }
 
     args->m_r->m_sb.sb_restarting = TRUE;
     RTMPSockBuf_Close(&args->m_r->m_sb, args->m_isSecondSocket);
@@ -1375,6 +1385,7 @@ static void RestartSocketHelperThread(void* arg)
     StartSocketConnection(args->m_r, args->m_isSecondSocket);
     args->m_r->m_sb.sb_restarting = FALSE;
 
+    args->m_threadId = -1;
     RTMP_Log(RTMP_LOGINFO, "-%s", __FUNCTION__);
 }
 
@@ -1382,9 +1393,14 @@ static void RestartSocketConnection(RTMP *r, int IsSecondSocket)
 {
     struct sockaddr_in service;
 
-    g_restart_socket_args.m_r = r;
-    g_restart_socket_args.m_isSecondSocket = IsSecondSocket;
-    _beginthread(RestartSocketHelperThread, 0, (void*)&g_restart_socket_args);
+    if (-1 == g_restart_socket_args.m_threadId) {
+        g_restart_socket_args.m_r = r;
+        g_restart_socket_args.m_isSecondSocket = IsSecondSocket;
+        g_restart_socket_args.m_threadId = _beginthread(RestartSocketHelperThread, 0, (void*)&g_restart_socket_args);
+    }
+    else {
+        RTMP_Log(RTMP_LOGINFO, "RestartSocketConnection: restart socket thread already working for IsSecondSocket %d, holding off", g_restart_socket_args.m_isSecondSocket);
+    }
 }
 
 static int
@@ -3750,7 +3766,7 @@ RTMPSockBuf_Fill(RTMPSockBuf *sb, int useSecondSocket)
 {
   int nBytes;
 
-  RTMP_Log(RTMP_LOGINFO, "+RTMPSockBuf_Fill active %d sb_size %d", sb->sb_active_read_socket, sb->sb_size);
+  RTMP_Log(RTMP_LOGINFO, "+RTMPSockBuf_Fill active %d sb_size %d buf %0X start %0X", sb->sb_active_read_socket, sb->sb_size, sb->sb_buf, sb->sb_start);
 
   if (!sb->sb_size)
     sb->sb_start = sb->sb_buf;
@@ -3963,10 +3979,10 @@ HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
     }
 
   // HACK HACK HACK -- restart preemptively (before proxy terminates us)
-  if (activeSockMsgCount % 20 == 0) {
-    RTMP_Log(RTMP_LOGINFO, "%s, socketMsgCount %d, restarting connection.", __FUNCTION__, activeSockMsgCount);
-    RestartSocketConnection(r, r->m_sb.sb_active_write_socket);  
-  }
+  //if (activeSockMsgCount % 20 == 0) {
+  //  RTMP_Log(RTMP_LOGINFO, "%s, socketMsgCount %d, restarting connection.", __FUNCTION__, activeSockMsgCount);
+  //  RestartSocketConnection(r, r->m_sb.sb_active_write_socket);  
+  //}
 
   if (RTMP_IsPublishing(r)) {
     if (r->m_sb.sb_active_write_socket) {
@@ -3986,7 +4002,8 @@ HTTP_read(RTMP *r, int fill)
   int hlen;
   int isNotOk = 0;
 
-  RTMP_Log(RTMP_LOGINFO, "+HTTP_read numResp %d numResp_b %d read socket %d size %d timeout %d", r->m_sb.sb_http_resp, r->m_sb.sb_http_resp_b, r->m_sb.sb_active_read_socket, r->m_sb.sb_size, r->m_sb.sb_timedout);
+  RTMP_Log(RTMP_LOGINFO, "+HTTP_read fill %d numResp %d numResp_b %d read socket %d size %d timeout %d",
+      fill, r->m_sb.sb_http_resp, r->m_sb.sb_http_resp_b, r->m_sb.sb_active_read_socket, r->m_sb.sb_size, r->m_sb.sb_timedout);
 
   if (fill) {
       RTMPSockBuf_Fill(&r->m_sb, r->m_sb.sb_active_read_socket);
@@ -4023,7 +4040,10 @@ HTTP_read(RTMP *r, int fill)
       if (!ptr)
         return -1;
       ptr += 4;
-  } while ( ptr + hlen > r->m_sb.sb_buf + r->m_sb.sb_size /*(r->m_sb.sb_buf + r->m_sb.sb_size - ptr + 1 < hlen)*/ &&
+
+      RTMP_Log(RTMP_LOGDEBUG, "HTTP_read ptr %0X hlen %d buf %0X size %d",
+               ptr, hlen, r->m_sb.sb_buf, r->m_sb.sb_size);
+  } while ( ptr + hlen > r->m_sb.sb_start + r->m_sb.sb_size /*(r->m_sb.sb_buf + r->m_sb.sb_size - ptr + 1 < hlen)*/ &&
             /* (r->m_sb.sb_timedout == FALSE) && */
             RTMPSockBuf_Fill(&r->m_sb, r->m_sb.sb_active_read_socket)  );
 
@@ -4031,32 +4051,34 @@ HTTP_read(RTMP *r, int fill)
   r->m_sb.sb_start = ptr;
   r->m_unackd--;
 
+  // Note: even in case of non-200 respose, consider it successful
+  // This handles the cases of a proxy swallowing an eventual response.
+  if (r->m_sb.sb_active_read_socket) {
+      r->m_sb.sb_http_resp_b++;
+  }
+  else {
+      r->m_sb.sb_http_resp++;
+  }
+
+  // Flip sockets
+  if (RTMP_IsPublishing(r) && !r->m_sb.sb_restarting) {
+    if (r->m_sb.sb_active_read_socket) {
+        r->m_sb.sb_active_read_socket = 0;
+    }
+    else {
+        r->m_sb.sb_active_read_socket = 1;
+    }
+  }
+
   if (isNotOk) {
       r->m_resplen = 0;
       if (hlen > 0) {
           r->m_sb.sb_start += hlen;
           r->m_sb.sb_size -= hlen;
       }
-      RTMP_Log(RTMP_LOGINFO, "HTTP_read throwing out non-200 response, HTTP resp len %d.  Trying to parse.", hlen);
+      RTMP_Log(RTMP_LOGINFO, "HTTP_read throwing out non-200 response, HTTP resp len %d.", hlen);
   } 
   else {
-      if (r->m_sb.sb_active_read_socket) {
-          r->m_sb.sb_http_resp_b++;
-      }
-      else {
-          r->m_sb.sb_http_resp++;
-      }
-
-      // Flip sockets
-      if (RTMP_IsPublishing(r)) {
-        if (r->m_sb.sb_active_read_socket) {
-            r->m_sb.sb_active_read_socket = 0;
-        }
-        else {
-            r->m_sb.sb_active_read_socket = 1;
-        }
-      }
-
       if (!r->m_clientID.av_val)
         {
           r->m_clientID.av_len = hlen;
