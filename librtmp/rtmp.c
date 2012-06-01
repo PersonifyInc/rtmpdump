@@ -4033,12 +4033,17 @@ HTTP_read(RTMP *r, int fill)
         //return -1;
       }
       ptr = strstr(r->m_sb.sb_start, "Content-Length:");
-      if (!ptr)
+      if (!ptr) {
+        RTMP_Log(RTMP_LOGERROR, "HTTP_read couldn't parse content-length");
         return -1;
+      }
       hlen = atoi(ptr+16);
+      RTMP_Log(RTMP_LOGDEBUG, "HTTP_read parsed content-length %d", hlen);
       ptr = strstr(ptr, "\r\n\r\n");
-      if (!ptr)
+      if (!ptr) {
+        RTMP_Log(RTMP_LOGERROR, "HTTP_read couldn't parse end of header");
         return -1;
+      }
       ptr += 4;
 
       RTMP_Log(RTMP_LOGDEBUG, "HTTP_read ptr %0X hlen %d buf %0X size %d",
