@@ -4825,7 +4825,9 @@ RTMP_Write(RTMP *r, const char *buf, int size)
 
         // Pipeline condition check
         // Do we need to not send yet?
-        if (r->m_unackd > 4)
+        if (r->m_unackd > 0)
+        // 06012012: disable HTTP pipelining -- wowza seems to be less happy about this
+        //if (r->m_unackd > 1)
         {
             pipeline_full = TRUE;
             RTMP_Log(RTMP_LOGDEBUG, "%s, not sending -- HTTP pipeline is full", __FUNCTION__);
