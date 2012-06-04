@@ -149,7 +149,7 @@ extern "C"
   void RTMPPacket_Reset(RTMPPacket *p);
   void RTMPPacket_Dump(RTMPPacket *p);
   int RTMPPacket_Alloc(RTMPPacket *p, int nSize);
-  void RTMPPacket_Free(RTMPPacket *p);
+  void LIBRTMP_API RTMPPacket_Free(RTMPPacket *p);
 
 #define RTMPPacket_IsReady(a)	((a)->m_nBytesRead == (a)->m_nBodySize)
 
@@ -372,6 +372,8 @@ extern "C"
   void LIBRTMP_API RTMP_DropRequest(RTMP *r, int i, int freeit);
   int LIBRTMP_API RTMP_Read(RTMP *r, char *buf, int size);
   int LIBRTMP_API RTMP_Write(RTMP *r, const char *buf, int size);
+
+  int LIBRTMP_API HTTP_read(RTMP *r, int fill);
 
 /* hashswf.c */
   int LIBRTMP_API RTMP_HashSWF(const char *url, unsigned int *size, unsigned char *hash,

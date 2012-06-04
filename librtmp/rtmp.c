@@ -914,12 +914,28 @@ RTMP_Connect1(RTMP *r, RTMPPacket *cp)
     }
   RTMP_Log(RTMP_LOGDEBUG, "%s, handshaked", __FUNCTION__);
 
+  if (r->Link.protocol & RTMP_FEATURE_HTTP) {
+      // With Wowza, seem to have an issue getting all responses.  Reset unacked count here
+      RTMP_Log(RTMP_LOGDEBUG, "%s, resetting unacked count", __FUNCTION__);
+      r->m_unackd = 0;
+
+      // Pre-connect/handshake response
+      // Note: with Wowza, this often seems to be missing
+      HTTP_read(r, 1);
+  }
+
   if (!SendConnectPacket(r, cp))
     {
       RTMP_Log(RTMP_LOGERROR, "%s, RTMP connect failed.", __FUNCTION__);
       RTMP_Close(r);
       return FALSE;
     }
+
+  if (r->Link.protocol & RTMP_FEATURE_HTTP) {
+      // Post-connect response
+      HTTP_read(r, 1);
+  }
+
   return TRUE;
 }
 
@@ -2574,7 +2590,16 @@ HandleInvoke(RTMP *r, const char *body, unsigned int nBodySize)
           if (r->Link.protocol & RTMP_FEATURE_WRITE)
           {
               SendReleaseStream(r);
+              if (r->Link.protocol & RTMP_FEATURE_HTTP) {
+                // read response post-release stream?
+                HTTP_read(r, 1);
+              }
+
               SendFCPublish(r);
+              if (r->Link.protocol & RTMP_FEATURE_HTTP) {
+                // read response post-FC publish?
+                HTTP_read(r, 1);
+              }
           }
           else
           {
@@ -3995,7 +4020,7 @@ HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
   return hlen;
 }
 
-static int
+int
 HTTP_read(RTMP *r, int fill)
 {
   char *ptr;
