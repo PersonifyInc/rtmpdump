@@ -45,6 +45,8 @@
 TLS_CTX RTMP_TLS_ctx;
 #endif
 
+#include <winhttp.h>
+
 #define RTMP_SIG_SIZE 1536
 #define RTMP_LARGE_HEADER_SIZE 12
 
@@ -256,6 +258,11 @@ RTMP_Init(RTMP *r)
   r->m_sb.sb_active_write_socket = 0;
   r->m_sb.sb_socket = -1;
   r->m_sb.sb_socket_b = -1;
+  r->m_sb.sb_winhttp_sess = NULL;
+  r->m_sb.sb_winhttp_conn = NULL;
+  r->m_sb.sb_winhttp_conn_b = NULL;
+  r->m_sb.sb_winhttp_req = NULL;
+  r->m_sb.sb_winhttp_req_b = NULL;
   r->m_fPublishing = FALSE;
   r->m_inChunkSize = RTMP_DEFAULT_CHUNKSIZE;
   r->m_outChunkSize = RTMP_DEFAULT_CHUNKSIZE;
@@ -286,7 +293,11 @@ RTMP_GetDuration(RTMP *r)
 int
 RTMP_IsConnected(RTMP *r)
 {
-  return r->m_sb.sb_socket != -1;
+    if (r->Link.protocol & RTMP_FEATURE_HTTP) {
+        return (r->m_sb.sb_winhttp_conn != NULL) || (r->m_sb.sb_winhttp_conn_b != NULL); 
+    }
+
+    return r->m_sb.sb_socket != -1;
 }
 
 int
@@ -824,52 +835,74 @@ int
 RTMP_Connect0(RTMP *r, struct sockaddr * service)
 {
   int on = 1;
+  DWORD err;
+  wchar_t hostname[256];
+  int wideHostnameLen;
   r->m_sb.sb_timedout = FALSE;
   r->m_pausing = 0;
   r->m_fDuration = 0.0;
 
-  r->m_sb.sb_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-  if (r->m_sb.sb_socket != -1)
-    {
-      if (connect(r->m_sb.sb_socket, service, sizeof(struct sockaddr)) < 0)
-	{
-	  int err = GetSockError();
-	  RTMP_Log(RTMP_LOGERROR, "%s, failed to connect socket. %d (%s)",
-	      __FUNCTION__, err, strerror(err));
-	  RTMP_Close(r);
-	  return FALSE;
-	}
+  if (r->Link.protocol & RTMP_FEATURE_HTTP) {
+      // 06212012: connect up the WinHttp socket
+      r->m_sb.sb_winhttp_sess = WinHttpOpen(L"Shockwave Flash",
+        WINHTTP_ACCESS_TYPE_NO_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS,
+        0);
 
-      if (r->Link.socksport)
-	{
-	  RTMP_Log(RTMP_LOGDEBUG, "%s ... SOCKS negotiation", __FUNCTION__);
-	  if (!SocksNegotiate(r))
+      if (r->m_sb.sb_winhttp_sess) {
+        // copy hostname
+        memset(hostname, 0, sizeof(hostname));
+        wideHostnameLen = MultiByteToWideChar(CP_ACP, 0, r->Link.hostname.av_val, 
+            r->Link.hostname.av_len, hostname, r->Link.hostname.av_len+1);
+        r->m_sb.sb_winhttp_conn = WinHttpConnect(r->m_sb.sb_winhttp_sess, hostname, r->Link.port, 0);
+        if (!r->m_sb.sb_winhttp_conn) {
+            err = GetLastError();
+        }
+      }
+  }
+  else {
+      r->m_sb.sb_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+      if (r->m_sb.sb_socket != -1)
+        {
+          if (connect(r->m_sb.sb_socket, service, sizeof(struct sockaddr)) < 0)
 	    {
-	      RTMP_Log(RTMP_LOGERROR, "%s, SOCKS negotiation failed.", __FUNCTION__);
+	      int err = GetSockError();
+	      RTMP_Log(RTMP_LOGERROR, "%s, failed to connect socket. %d (%s)",
+	          __FUNCTION__, err, strerror(err));
 	      RTMP_Close(r);
 	      return FALSE;
 	    }
-	}
-    }
-  else
-    {
-      RTMP_Log(RTMP_LOGERROR, "%s, failed to create socket. Error: %d", __FUNCTION__,
-	  GetSockError());
-      return FALSE;
-    }
 
-  /* set timeout */
-  {
-    SET_RCVTIMEO(tv, r->Link.timeout);
-    if (setsockopt
-        (r->m_sb.sb_socket, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv, sizeof(tv)))
+          if (r->Link.socksport)
+	    {
+	      RTMP_Log(RTMP_LOGDEBUG, "%s ... SOCKS negotiation", __FUNCTION__);
+	      if (!SocksNegotiate(r))
+	        {
+	          RTMP_Log(RTMP_LOGERROR, "%s, SOCKS negotiation failed.", __FUNCTION__);
+	          RTMP_Close(r);
+	          return FALSE;
+	        }
+	    }
+        }
+      else
+        {
+          RTMP_Log(RTMP_LOGERROR, "%s, failed to create socket. Error: %d", __FUNCTION__,
+	      GetSockError());
+          return FALSE;
+        }
+
+      /* set timeout */
       {
-        RTMP_Log(RTMP_LOGERROR, "%s, Setting socket timeout to %ds failed!",
-	    __FUNCTION__, r->Link.timeout);
+        SET_RCVTIMEO(tv, r->Link.timeout);
+        if (setsockopt
+            (r->m_sb.sb_socket, SOL_SOCKET, SO_RCVTIMEO, (char *)&tv, sizeof(tv)))
+          {
+            RTMP_Log(RTMP_LOGERROR, "%s, Setting socket timeout to %ds failed!",
+	        __FUNCTION__, r->Link.timeout);
+          }
       }
-  }
 
-  setsockopt(r->m_sb.sb_socket, IPPROTO_TCP, TCP_NODELAY, (char *) &on, sizeof(on));
+      setsockopt(r->m_sb.sb_socket, IPPROTO_TCP, TCP_NODELAY, (char *) &on, sizeof(on));
+  }
 
   return TRUE;
 }
@@ -1443,6 +1476,14 @@ ReadN(RTMP *r, char *buffer, int n)
         {
             while (!r->m_resplen)
             {
+#if 1
+                // only sending idles out when connecting stream
+                if ((!r->m_unackd) && (r->m_bPlaying == FALSE)) {					
+                    HTTP_Post(r, RTMPT_IDLE, "", 1);
+                }
+#endif
+// 06152012: HACK don't fill, just do a HTTP_read
+#if 0
                 if (r->m_sb.sb_size < 144)
                 {
                     // only sending idles out when connecting stream
@@ -1476,13 +1517,17 @@ ReadN(RTMP *r, char *buffer, int n)
                         }
                     }
                 }
+#endif
                 HTTP_read(r, 0);
             }
+// HACK 06152012: not needed if we're guaranteed to get a full packet above?
+#if 0
             if (r->m_resplen && !r->m_sb.sb_size) {
                 // Hit the previous socket here -- since HTTP_read will switch
                 RTMP_Log(RTMP_LOGDEBUG, "%s first read didn't get payload. using socket %d\n", __FUNCTION__, r->m_sb.sb_active_read_socket ? 0 : 1);
                 RTMPSockBuf_Fill(&r->m_sb, r->m_sb.sb_active_read_socket ? 0 : 1);
             }
+#endif
             avail = r->m_sb.sb_size;
             if (avail > r->m_resplen)
                 avail = r->m_resplen;
@@ -3965,33 +4010,44 @@ DecodeTEA(AVal *key, AVal *text)
 static int
 HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
 {
-  char hbuf[512];
+  BOOL ret = FALSE;
+  DWORD err;
+  int hlen;
+  DWORD bytesWritten;
+  wchar_t hbuf[512];
+  wchar_t hurlbuf[512];
+  wchar_t* acceptTypes[2];
   int activeSockMsgCount;
 
-  int hlen = sprintf(hbuf, "POST /%s%s/%d HTTP/1.1\r\n"
-    "Host: %.*s:%d\r\n"
-    "Accept: */*\r\n"
-    "User-Agent: Shockwave Flash\n"
-    "Connection: Keep-Alive\n"
-    "Cache-Control: no-cache\r\n"
-    "Content-type: application/x-fcs\r\n"
-    "Content-length: %d\r\n\r\n", RTMPT_cmds[cmd],
+  acceptTypes[0] = L"*/*";
+  acceptTypes[1] = NULL;
+
+  hlen = _snwprintf(hurlbuf, 512, L"/%S%S/%d",
+    RTMPT_cmds[cmd],
     r->m_clientID.av_val ? r->m_clientID.av_val : "",
-    r->m_msgCounter, r->Link.hostname.av_len, r->Link.hostname.av_val,
-    r->Link.port, len);
+    r->m_msgCounter);
+
+  wcsncpy(hbuf, L"Content-type: application/x-fcs\r\n", sizeof(L"Content-type: application/x-fcs\r\n")+1);
+  //hlen = swprintf(hbuf, L"Content-type: application/x-fcs\r\n");
+
+  r->m_sb.sb_winhttp_req = WinHttpOpenRequest(r->m_sb.sb_winhttp_conn, L"POST", hurlbuf, NULL, WINHTTP_NO_REFERER, acceptTypes, 0);
+  if (r->m_sb.sb_winhttp_req != NULL) {
+    ret = WinHttpSendRequest(r->m_sb.sb_winhttp_req, hbuf, -1L, 0, 0, len, NULL);
+  }
+  else {
+    err = GetLastError();
+  }
 
   RTMP_Log(RTMP_LOGINFO, "+HTTP_Post, num req %d num req b %d active_socket %d", r->m_sb.sb_http_req, r->m_sb.sb_http_req_b, r->m_sb.sb_active_write_socket);
 
   RTMP_Log(RTMP_LOGDEBUG, "%s, unacked count: %d.",
     __FUNCTION__, r->m_unackd);
-  // HACK HACK HACK -- horrible idea. Just wait around a bit until we can send again.
-  //while (r->m_unackd > 4)
-  //{
-  //    Sleep(100);
-  //}
+  
+  bytesWritten = 0;
+  ret = WinHttpWriteData(r->m_sb.sb_winhttp_req, buf, len, &bytesWritten);
 
-  RTMPSockBuf_Send(&r->m_sb, r->m_sb.sb_active_write_socket, hbuf, hlen);
-  hlen = RTMPSockBuf_Send(&r->m_sb, r->m_sb.sb_active_write_socket, buf, len);
+  //RTMPSockBuf_Send(&r->m_sb, r->m_sb.sb_active_write_socket, hbuf, hlen);
+  //hlen = RTMPSockBuf_Send(&r->m_sb, r->m_sb.sb_active_write_socket, buf, len);
   r->m_msgCounter++;
   r->m_unackd++;
 
@@ -4017,19 +4073,77 @@ HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
     }
   }
 
-  return hlen;
+  //return hlen;
+  return bytesWritten;
 }
 
 int
 HTTP_read(RTMP *r, int fill)
 {
+  BOOL ret;
   char *ptr;
-  int hlen;
+  char headerBuf[512];
+  DWORD err;
+  DWORD headerLen = 512;
+  DWORD bytesAvail = 0;
+  DWORD bytesRead = 0;
+  int hlen = 0;
   int isNotOk = 0;
+  int status = 0;
 
   RTMP_Log(RTMP_LOGINFO, "+HTTP_read fill %d numResp %d numResp_b %d read socket %d size %d timeout %d",
       fill, r->m_sb.sb_http_resp, r->m_sb.sb_http_resp_b, r->m_sb.sb_active_read_socket, r->m_sb.sb_size, r->m_sb.sb_timedout);
+  
+  ret = WinHttpReceiveResponse(r->m_sb.sb_winhttp_req, NULL);
 
+  if (ret == TRUE) {
+      if (WinHttpQueryHeaders(r->m_sb.sb_winhttp_req,
+                              WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, 
+                              WINHTTP_HEADER_NAME_BY_INDEX,
+                              headerBuf,
+                              &headerLen,
+                              WINHTTP_NO_HEADER_INDEX)) {
+        // Get status
+        status = *((int*)headerBuf);
+      }
+
+      if (status == 200) {
+          bytesAvail = 0;
+          bytesRead = 0;
+          do {
+            ret = WinHttpQueryDataAvailable(r->m_sb.sb_winhttp_req, &bytesAvail);
+            if (ret && bytesAvail > 0) {
+                if (WinHttpReadData(r->m_sb.sb_winhttp_req, r->m_sb.sb_buf + r->m_sb.sb_size, bytesAvail, &bytesRead)) {
+                    r->m_sb.sb_size += bytesRead;
+                    hlen += bytesRead;
+                }
+            }
+          } while (bytesAvail > 0);
+
+#if 0
+          headerLen = 512;
+          if (WinHttpQueryHeaders(r->m_sb.sb_winhttp_req,
+                                  WINHTTP_QUERY_CONTENT_LENGTH,
+                                  WINHTTP_HEADER_NAME_BY_INDEX,
+                                  headerBuf,
+                                  &headerLen,
+                                  WINHTTP_NO_HEADER_INDEX)) {
+            // Get length
+          }
+#endif
+      }
+      else { // status != 200
+        RTMP_Log(RTMP_LOGINFO, "HTTP_read got non-200 response %d.", status);
+        isNotOk = 1;
+      }
+  }
+  else {
+    err = GetLastError();
+    RTMP_Log(RTMP_LOGERROR, "HTTP_read error receiving response %d, returning.", err);
+    return 0;
+  }
+  
+#if 0
   if (fill) {
       RTMPSockBuf_Fill(&r->m_sb, r->m_sb.sb_active_read_socket);
   }
@@ -4078,8 +4192,12 @@ HTTP_read(RTMP *r, int fill)
             RTMPSockBuf_Fill(&r->m_sb, r->m_sb.sb_active_read_socket)  );
 
   r->m_sb.sb_size -= ptr - r->m_sb.sb_start;
+#endif
+  ptr = r->m_sb.sb_buf;
   r->m_sb.sb_start = ptr;
-  r->m_unackd--;
+  if (status == 200) {
+    r->m_unackd--;
+  }
 
   // Note: even in case of non-200 respose, consider it successful
   // This handles the cases of a proxy swallowing an eventual response.
@@ -4101,11 +4219,14 @@ HTTP_read(RTMP *r, int fill)
   }
 
   if (isNotOk) {
+      // 06222012: HACK -- remove this in error case
+#if 0
       r->m_resplen = 0;
       if (hlen > 0) {
           r->m_sb.sb_start += hlen;
           r->m_sb.sb_size -= hlen;
       }
+#endif
       RTMP_Log(RTMP_LOGINFO, "HTTP_read throwing out non-200 response, HTTP resp len %d.", hlen);
   } 
   else {

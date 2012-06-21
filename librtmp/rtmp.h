@@ -37,6 +37,9 @@
 
 #include "amf.h"
 
+// For winhttp
+typedef LPVOID HINTERNET;
+
 #ifdef __cplusplus
 extern "C"
 {
@@ -134,6 +137,11 @@ extern "C"
     int sb_active_write_socket; /* 0 for sb_socket, 1 for sb_socket_b */
     int sb_socket;
     int sb_socket_b;
+    HINTERNET sb_winhttp_sess;
+    HINTERNET sb_winhttp_conn;
+    HINTERNET sb_winhttp_conn_b;
+    HINTERNET sb_winhttp_req;
+    HINTERNET sb_winhttp_req_b;
     int sb_size;		/* number of unprocessed bytes in buffer */
     char *sb_start;		/* pointer into sb_pBuffer of next byte to process */
     char sb_buf[RTMP_BUFFER_CACHE_SIZE];	/* data read from socket */
