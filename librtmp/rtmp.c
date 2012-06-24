@@ -27,8 +27,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
-
 #include <process.h>
+#include <winsock2.h>
+#include <winhttp.h>
 
 #include "rtmp_sys.h"
 #include "log.h"
@@ -44,8 +45,6 @@
 #endif
 TLS_CTX RTMP_TLS_ctx;
 #endif
-
-#include <winhttp.h>
 
 #define RTMP_SIG_SIZE 1536
 #define RTMP_LARGE_HEADER_SIZE 12
@@ -263,6 +262,12 @@ RTMP_Init(RTMP *r)
   r->m_sb.sb_winhttp_conn_b = NULL;
   r->m_sb.sb_winhttp_req = NULL;
   r->m_sb.sb_winhttp_req_b = NULL;
+  r->m_sb.sb_winhttp_req_proxy_conf = FALSE;
+  r->m_sb.sb_winhttp_use_auto_proxy = FALSE;
+  // 06232012 HACK HACK HACK -- release this memory!!!!!
+  r->m_sb.sb_winhttp_proxy_config = calloc(1, sizeof(WINHTTP_CURRENT_USER_IE_PROXY_CONFIG));
+  r->m_sb.sb_winhttp_auto_proxy_opts = calloc(1, sizeof(WINHTTP_AUTOPROXY_OPTIONS));
+  r->m_sb.sb_winhttp_auto_proxy_info = calloc(1, sizeof(WINHTTP_PROXY_INFO));
   r->m_fPublishing = FALSE;
   r->m_inChunkSize = RTMP_DEFAULT_CHUNKSIZE;
   r->m_outChunkSize = RTMP_DEFAULT_CHUNKSIZE;
@@ -838,11 +843,40 @@ RTMP_Connect0(RTMP *r, struct sockaddr * service)
   DWORD err;
   wchar_t hostname[256];
   int wideHostnameLen;
+  BOOL fAutoProxy = FALSE;
+  WINHTTP_CURRENT_USER_IE_PROXY_CONFIG ieProxyConfig;
+  WINHTTP_AUTOPROXY_OPTIONS autoProxyOptions;
+  WINHTTP_PROXY_INFO autoProxyInfo;
+
   r->m_sb.sb_timedout = FALSE;
   r->m_pausing = 0;
   r->m_fDuration = 0.0;
 
   if (r->Link.protocol & RTMP_FEATURE_HTTP) {
+      // 06232012: figure out the proxy configuration
+      if( WinHttpGetIEProxyConfigForCurrentUser( r->m_sb.sb_winhttp_proxy_config ) ) {
+          if( r->m_sb.sb_winhttp_proxy_config->fAutoDetect ) {
+              r->m_sb.sb_winhttp_use_auto_proxy = TRUE;
+          }
+
+          if( r->m_sb.sb_winhttp_proxy_config->lpszAutoConfigUrl != NULL ) {
+              r->m_sb.sb_winhttp_use_auto_proxy = TRUE;
+              r->m_sb.sb_winhttp_auto_proxy_opts->dwFlags |= WINHTTP_AUTOPROXY_CONFIG_URL;
+              r->m_sb.sb_winhttp_auto_proxy_opts->lpszAutoConfigUrl = r->m_sb.sb_winhttp_proxy_config->lpszAutoConfigUrl;
+          }
+      }
+      else {
+          // use autoproxy
+          r->m_sb.sb_winhttp_use_auto_proxy = TRUE;
+      }
+
+      if( r->m_sb.sb_winhttp_use_auto_proxy ) {
+          // basic flags you almost always want
+          r->m_sb.sb_winhttp_auto_proxy_opts->dwFlags = WINHTTP_AUTOPROXY_AUTO_DETECT;
+          r->m_sb.sb_winhttp_auto_proxy_opts->dwAutoDetectFlags = WINHTTP_AUTO_DETECT_TYPE_DHCP | WINHTTP_AUTO_DETECT_TYPE_DNS_A;
+          r->m_sb.sb_winhttp_auto_proxy_opts->fAutoLogonIfChallenged = TRUE;
+      }
+
       // 06212012: connect up the WinHttp socket
       r->m_sb.sb_winhttp_sess = WinHttpOpen(L"Shockwave Flash",
         WINHTTP_ACCESS_TYPE_NO_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS,
@@ -4011,6 +4045,7 @@ static int
 HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
 {
   BOOL ret = FALSE;
+  unsigned long autologin_policy = WINHTTP_AUTOLOGON_SECURITY_LEVEL_LOW;
   DWORD err;
   int hlen;
   DWORD bytesWritten;
@@ -4018,6 +4053,11 @@ HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
   wchar_t hurlbuf[512];
   wchar_t* acceptTypes[2];
   int activeSockMsgCount;
+  char headerBuf[512];
+  DWORD headerLen = 512;
+  int status = 0;
+
+  RTMP_Log(RTMP_LOGINFO, "+HTTP_Post, num req %d num req b %d active_socket %d", r->m_sb.sb_http_req, r->m_sb.sb_http_req_b, r->m_sb.sb_active_write_socket);
 
   acceptTypes[0] = L"*/*";
   acceptTypes[1] = NULL;
@@ -4028,23 +4068,82 @@ HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
     r->m_msgCounter);
 
   wcsncpy(hbuf, L"Content-type: application/x-fcs\r\n", sizeof(L"Content-type: application/x-fcs\r\n")+1);
-  //hlen = swprintf(hbuf, L"Content-type: application/x-fcs\r\n");
 
   r->m_sb.sb_winhttp_req = WinHttpOpenRequest(r->m_sb.sb_winhttp_conn, L"POST", hurlbuf, NULL, WINHTTP_NO_REFERER, acceptTypes, 0);
-  if (r->m_sb.sb_winhttp_req != NULL) {
-    ret = WinHttpSendRequest(r->m_sb.sb_winhttp_req, hbuf, -1L, 0, 0, len, NULL);
-  }
-  else {
-    err = GetLastError();
+
+  hlen = _snwprintf(hurlbuf, 512, L"http://%S/%S%S/%d",
+    r->Link.hostname.av_val,
+    RTMPT_cmds[cmd],
+    r->m_clientID.av_val ? r->m_clientID.av_val : "",
+    r->m_msgCounter);
+
+  // Configure proxy, if we're using
+  if( r->m_sb.sb_winhttp_use_auto_proxy) {
+      if (r->m_sb.sb_winhttp_req_proxy_conf == FALSE) {
+            r->m_sb.sb_winhttp_req_proxy_conf = TRUE;
+
+            // Get proxy once here
+            if (WinHttpGetProxyForUrl(r->m_sb.sb_winhttp_sess, hurlbuf, r->m_sb.sb_winhttp_auto_proxy_opts, r->m_sb.sb_winhttp_auto_proxy_info) == FALSE) {
+                err = GetLastError();
+                RTMP_Log(RTMP_LOGERROR, "HTTP_Post, WinHttpGetProxyForUrl url: %S err: %d", hurlbuf, err);
+            }
+      }
+
+      // Set options here
+      if (!WinHttpSetOption(r->m_sb.sb_winhttp_req, WINHTTP_OPTION_PROXY, r->m_sb.sb_winhttp_auto_proxy_info, sizeof(WINHTTP_PROXY_INFO))) {
+        err = GetLastError();
+        RTMP_Log(RTMP_LOGERROR, "HTTP_Post, WinHttpSetOption for proxy err: %d", err);
+      }
+
+      if (!WinHttpSetOption(r->m_sb.sb_winhttp_req, WINHTTP_OPTION_AUTOLOGON_POLICY, &autologin_policy, sizeof(unsigned long))) {
+        err = GetLastError();
+        RTMP_Log(RTMP_LOGERROR, "HTTP_Post, WinHttpSetOption for proxy err: %d", err);
+      }
   }
 
-  RTMP_Log(RTMP_LOGINFO, "+HTTP_Post, num req %d num req b %d active_socket %d", r->m_sb.sb_http_req, r->m_sb.sb_http_req_b, r->m_sb.sb_active_write_socket);
+  do {
+      if (r->m_sb.sb_winhttp_req != NULL) {
+          do {
+            ret = WinHttpSendRequest(r->m_sb.sb_winhttp_req, hbuf, -1L, 0, 0, len, NULL);
+            if (ret == FALSE) {
+                err = GetLastError();
+                RTMP_Log(RTMP_LOGERROR, "HTTP_Post, WinHttpSendRequest err: %d", err);
+            }
+          } while (ret == FALSE && err == ERROR_WINHTTP_RESEND_REQUEST);
+      }
+      else {
+        err = GetLastError();
+        RTMP_Log(RTMP_LOGERROR, "HTTP_Post, WinHttpOpenRequest err: %d", err);
+      }
 
-  RTMP_Log(RTMP_LOGDEBUG, "%s, unacked count: %d.",
-    __FUNCTION__, r->m_unackd);
-  
-  bytesWritten = 0;
-  ret = WinHttpWriteData(r->m_sb.sb_winhttp_req, buf, len, &bytesWritten);
+      RTMP_Log(RTMP_LOGDEBUG, "%s, unacked count: %d.",
+        __FUNCTION__, r->m_unackd);
+      
+      bytesWritten = 0;
+      ret = WinHttpWriteData(r->m_sb.sb_winhttp_req, buf, len, &bytesWritten);
+      if (ret == FALSE) {
+          err = GetLastError();
+          RTMP_Log(RTMP_LOGERROR, "HTTP_Post, WinHttpWriteData err: %d", err);
+
+          if (err == ERROR_WINHTTP_RESEND_REQUEST) {
+              RTMP_Log(RTMP_LOGINFO, "HTTP_Post, WinHttpWriteData going back to resend request");
+              continue;
+          }
+      }
+
+      /* Ensure request was received w/o error -- and check for any proxy login requirements */
+      ret = WinHttpReceiveResponse(r->m_sb.sb_winhttp_req, NULL);
+
+      if (ret == FALSE) {
+          err = GetLastError();
+          RTMP_Log(RTMP_LOGERROR, "HTTP_Post, WinHttpReceiveResponse err: %d", err);
+
+          if (err == ERROR_WINHTTP_RESEND_REQUEST) {
+              RTMP_Log(RTMP_LOGINFO, "HTTP_Post, WinHttpReceiveResponse going back to resend request");
+              continue;
+          }
+      }
+  } while (ret == FALSE);
 
   //RTMPSockBuf_Send(&r->m_sb, r->m_sb.sb_active_write_socket, hbuf, hlen);
   //hlen = RTMPSockBuf_Send(&r->m_sb, r->m_sb.sb_active_write_socket, buf, len);
@@ -4094,9 +4193,7 @@ HTTP_read(RTMP *r, int fill)
   RTMP_Log(RTMP_LOGINFO, "+HTTP_read fill %d numResp %d numResp_b %d read socket %d size %d timeout %d",
       fill, r->m_sb.sb_http_resp, r->m_sb.sb_http_resp_b, r->m_sb.sb_active_read_socket, r->m_sb.sb_size, r->m_sb.sb_timedout);
   
-  ret = WinHttpReceiveResponse(r->m_sb.sb_winhttp_req, NULL);
-
-  if (ret == TRUE) {
+  if (1 /*ret == TRUE*/) {
       if (WinHttpQueryHeaders(r->m_sb.sb_winhttp_req,
                               WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER, 
                               WINHTTP_HEADER_NAME_BY_INDEX,
@@ -4119,18 +4216,6 @@ HTTP_read(RTMP *r, int fill)
                 }
             }
           } while (bytesAvail > 0);
-
-#if 0
-          headerLen = 512;
-          if (WinHttpQueryHeaders(r->m_sb.sb_winhttp_req,
-                                  WINHTTP_QUERY_CONTENT_LENGTH,
-                                  WINHTTP_HEADER_NAME_BY_INDEX,
-                                  headerBuf,
-                                  &headerLen,
-                                  WINHTTP_NO_HEADER_INDEX)) {
-            // Get length
-          }
-#endif
       }
       else { // status != 200
         RTMP_Log(RTMP_LOGINFO, "HTTP_read got non-200 response %d.", status);
@@ -4193,61 +4278,59 @@ HTTP_read(RTMP *r, int fill)
 
   r->m_sb.sb_size -= ptr - r->m_sb.sb_start;
 #endif
-  ptr = r->m_sb.sb_buf;
-  r->m_sb.sb_start = ptr;
-  if (status == 200) {
-    r->m_unackd--;
-  }
 
-  // Note: even in case of non-200 respose, consider it successful
-  // This handles the cases of a proxy swallowing an eventual response.
-  if (r->m_sb.sb_active_read_socket) {
-      r->m_sb.sb_http_resp_b++;
-  }
-  else {
-      r->m_sb.sb_http_resp++;
-  }
-
-  // Flip sockets
-  if (RTMP_IsPublishing(r) && !r->m_sb.sb_restarting) {
-    if (r->m_sb.sb_active_read_socket) {
-        r->m_sb.sb_active_read_socket = 0;
-    }
-    else {
-        r->m_sb.sb_active_read_socket = 1;
-    }
-  }
-
-  if (isNotOk) {
-      // 06222012: HACK -- remove this in error case
-#if 0
-      r->m_resplen = 0;
-      if (hlen > 0) {
-          r->m_sb.sb_start += hlen;
-          r->m_sb.sb_size -= hlen;
+  if (hlen > 0) {
+      ptr = r->m_sb.sb_buf;
+      r->m_sb.sb_start = ptr;
+      if (status == 200) {
+        r->m_unackd--;
       }
-#endif
-      RTMP_Log(RTMP_LOGINFO, "HTTP_read throwing out non-200 response, HTTP resp len %d.", hlen);
-  } 
-  else {
-      if (!r->m_clientID.av_val)
-        {
-          r->m_clientID.av_len = hlen;
-          r->m_clientID.av_val = malloc(hlen+1);
+
+      // Note: even in case of non-200 respose, consider it successful
+      // This handles the cases of a proxy swallowing an eventual response.
+      if (r->m_sb.sb_active_read_socket) {
+          r->m_sb.sb_http_resp_b++;
+      }
+      else {
+          r->m_sb.sb_http_resp++;
+      }
+
+      // Flip sockets
+      if (RTMP_IsPublishing(r) && !r->m_sb.sb_restarting) {
+        if (r->m_sb.sb_active_read_socket) {
+            r->m_sb.sb_active_read_socket = 0;
+        }
+        else {
+            r->m_sb.sb_active_read_socket = 1;
+        }
+      }
+
+      if (isNotOk) {
+          RTMP_Log(RTMP_LOGINFO, "HTTP_read throwing out non-200 response, HTTP resp len %d.", hlen);
+      } 
+      else {
           if (!r->m_clientID.av_val)
-            return -1;
-          r->m_clientID.av_val[0] = '/';
-          memcpy(r->m_clientID.av_val+1, ptr, hlen-1);
-          r->m_clientID.av_val[hlen] = 0;
-          r->m_sb.sb_size = 0;
-        }
-      else
-        {
-          r->m_polling = *ptr++;
-          r->m_resplen = hlen - 1;
-          r->m_sb.sb_start++;
-          r->m_sb.sb_size--;
-        }
+            {
+              r->m_clientID.av_len = hlen;
+              r->m_clientID.av_val = malloc(hlen+1);
+              if (!r->m_clientID.av_val)
+                return -1;
+              r->m_clientID.av_val[0] = '/';
+              memcpy(r->m_clientID.av_val+1, ptr, hlen-1);
+              r->m_clientID.av_val[hlen] = 0;
+              r->m_sb.sb_size = 0;
+            }
+          else
+            {
+              r->m_polling = *ptr++;
+              r->m_resplen = hlen - 1;
+              r->m_sb.sb_start++;
+              r->m_sb.sb_size--;
+            }
+      }
+  }
+  else { // hlen <= 0
+    RTMP_Log(RTMP_LOGINFO, "HTTP_read throwing out empty response, HTTP resp len %d.", hlen);
   }
 
   RTMP_Log(RTMP_LOGINFO, "-HTTP_read numResp %d numResp_b %d read socket %d size %d resplen %d timeout %d", r->m_sb.sb_http_resp, r->m_sb.sb_http_resp_b, r->m_sb.sb_active_read_socket, r->m_sb.sb_size, r->m_resplen, r->m_sb.sb_timedout);

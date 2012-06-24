@@ -37,9 +37,6 @@
 
 #include "amf.h"
 
-// For winhttp
-typedef LPVOID HINTERNET;
-
 #ifdef __cplusplus
 extern "C"
 {
@@ -131,6 +128,16 @@ extern "C"
     char *m_body;
   } RTMPPacket;
 
+  // Forward declaraction of struct types -- nasty hack since winhttp and wininet don't play nice
+#if 1
+#ifndef WINHTTPAPI
+  typedef LPVOID HINTERNET;
+  typedef struct { int a; } WINHTTP_CURRENT_USER_IE_PROXY_CONFIG;
+  typedef struct { int a; } WINHTTP_AUTOPROXY_OPTIONS;
+  typedef struct { int a; } WINHTTP_PROXY_INFO;
+#endif /* WINHTTPAPI */
+#endif
+
   typedef struct RTMPSockBuf
   {
     int sb_active_read_socket; /* 0 for sb_socket, 1 for sb_socket_b */
@@ -142,6 +149,11 @@ extern "C"
     HINTERNET sb_winhttp_conn_b;
     HINTERNET sb_winhttp_req;
     HINTERNET sb_winhttp_req_b;
+    BOOL sb_winhttp_req_proxy_conf;
+    BOOL sb_winhttp_use_auto_proxy;
+    WINHTTP_CURRENT_USER_IE_PROXY_CONFIG* sb_winhttp_proxy_config;
+    WINHTTP_AUTOPROXY_OPTIONS* sb_winhttp_auto_proxy_opts;
+    WINHTTP_PROXY_INFO* sb_winhttp_auto_proxy_info;
     int sb_size;		/* number of unprocessed bytes in buffer */
     char *sb_start;		/* pointer into sb_pBuffer of next byte to process */
     char sb_buf[RTMP_BUFFER_CACHE_SIZE];	/* data read from socket */
