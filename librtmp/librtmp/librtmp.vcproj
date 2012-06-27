@@ -206,6 +206,10 @@
 				>
 			</File>
 			<File
+				RelativePath="..\list.c"
+				>
+			</File>
+			<File
 				RelativePath="..\log.c"
 				>
 			</File>
@@ -249,6 +253,10 @@
 			</File>
 			<File
 				RelativePath=".\librtmp.h"
+				>
+			</File>
+			<File
+				RelativePath="..\list.h"
 				>
 			</File>
 			<File

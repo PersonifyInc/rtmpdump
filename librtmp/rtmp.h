@@ -36,6 +36,7 @@
 #include <stddef.h>
 
 #include "amf.h"
+#include "list.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -143,12 +144,11 @@ extern "C"
     int sb_active_read_socket; /* 0 for sb_socket, 1 for sb_socket_b */
     int sb_active_write_socket; /* 0 for sb_socket, 1 for sb_socket_b */
     int sb_socket;
-    int sb_socket_b;
     HINTERNET sb_winhttp_sess;
+    HINTERNET sb_winhttp_sess_b;
     HINTERNET sb_winhttp_conn;
     HINTERNET sb_winhttp_conn_b;
-    HINTERNET sb_winhttp_req;
-    HINTERNET sb_winhttp_req_b;
+    LIST sb_winhttp_req_queue;
     BOOL sb_winhttp_req_proxy_conf;
     BOOL sb_winhttp_use_auto_proxy;
     WINHTTP_CURRENT_USER_IE_PROXY_CONFIG* sb_winhttp_proxy_config;
@@ -381,9 +381,9 @@ extern "C"
   int LIBRTMP_API RTMP_FindFirstMatchingProperty(AMFObject *obj, const AVal *name,
 				      AMFObjectProperty * p);
 
-  int LIBRTMP_API RTMPSockBuf_Fill(RTMPSockBuf *sb, int useSecondSocket);
-  int LIBRTMP_API RTMPSockBuf_Send(RTMPSockBuf *sb, int useSecondSocket, const char *buf, int len);
-  int LIBRTMP_API RTMPSockBuf_Close(RTMPSockBuf *sb, int useSecondSocket);
+  int LIBRTMP_API RTMPSockBuf_Fill(RTMPSockBuf *sb);
+  int LIBRTMP_API RTMPSockBuf_Send(RTMPSockBuf *sb, const char *buf, int len);
+  int LIBRTMP_API RTMPSockBuf_Close(RTMPSockBuf *sb);
 
   int LIBRTMP_API RTMP_SendCreateStream(RTMP *r);
   int LIBRTMP_API RTMP_SendSeek(RTMP *r, int dTime);
