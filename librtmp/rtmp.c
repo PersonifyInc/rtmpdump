@@ -880,7 +880,7 @@ RTMP_Connect0(RTMP *r, struct sockaddr * service)
       memset(hostname, 0, sizeof(hostname));
       wideHostnameLen = MultiByteToWideChar(CP_ACP, 0, r->Link.hostname.av_val, 
                                             r->Link.hostname.av_len, hostname, r->Link.hostname.av_len+1);
-
+      hostname[r->Link.hostname.av_len] = 0;
       r->m_sb.sb_winhttp_sess = WinHttpOpen(L"Shockwave Flash",
         WINHTTP_ACCESS_TYPE_NO_PROXY, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS,
         0);
@@ -3850,9 +3850,18 @@ RTMPSockBuf_Close(RTMPSockBuf *sb)
   if (sb->sb_winhttp_conn_b) WinHttpCloseHandle(sb->sb_winhttp_conn_b);
   if (sb->sb_winhttp_sess) WinHttpCloseHandle(sb->sb_winhttp_sess);
   if (sb->sb_winhttp_sess_b) WinHttpCloseHandle(sb->sb_winhttp_sess_b);
-  if (sb->sb_winhttp_proxy_config) free(sb->sb_winhttp_proxy_config);
-  if (sb->sb_winhttp_auto_proxy_opts) free(sb->sb_winhttp_auto_proxy_opts);
-  if (sb->sb_winhttp_auto_proxy_info) free(sb->sb_winhttp_auto_proxy_info);
+  if (sb->sb_winhttp_proxy_config) {
+      free(sb->sb_winhttp_proxy_config);
+      sb->sb_winhttp_proxy_config = NULL;
+  }
+  if (sb->sb_winhttp_auto_proxy_opts) {
+      free(sb->sb_winhttp_auto_proxy_opts);
+      sb->sb_winhttp_auto_proxy_opts = NULL;
+  }
+  if (sb->sb_winhttp_auto_proxy_info) {
+      free(sb->sb_winhttp_auto_proxy_info);
+      sb->sb_winhttp_auto_proxy_info = NULL;
+  }
 
   return closesocket(sb->sb_socket);
 }
@@ -3964,8 +3973,8 @@ HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
   RTMP_Log(RTMP_LOGINFO, "HTTP_Post using connection %X\n", activeConnection);
   activeRequest = WinHttpOpenRequest(activeConnection, L"POST", hurlbuf, NULL, WINHTTP_NO_REFERER, acceptTypes, 0);
 
-  hlen = _snwprintf(hurlbuf, 512, L"http://%S/%S%S/%d",
-    r->Link.hostname.av_val,
+  hlen = _snwprintf(hurlbuf, 512, L"http://%.*S/%S%S/%d",
+    r->Link.hostname.av_len, r->Link.hostname.av_val,
     RTMPT_cmds[cmd],
     r->m_clientID.av_val ? r->m_clientID.av_val : "",
     r->m_msgCounter);
