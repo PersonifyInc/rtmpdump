@@ -33,6 +33,7 @@
 
 #include "rtmp_sys.h"
 #include "log.h"
+#include "librtmp/nxRtmpLogger.h"
 
 #ifdef CRYPTO
 #ifdef USE_POLARSSL
@@ -251,6 +252,8 @@ RTMP_Init(RTMP *r)
   if (!RTMP_TLS_ctx)
     RTMP_TLS_Init();
 #endif
+
+  nx_rtmp_log("+RTMP_Init");
 
   memset(r, 0, sizeof(RTMP));
   r->m_sb.sb_active_read_socket = 0;

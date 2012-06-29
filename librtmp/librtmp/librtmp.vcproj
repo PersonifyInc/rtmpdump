@@ -63,6 +63,7 @@
 				Name="VCLinkerTool"
 				AdditionalDependencies="Ws2_32.lib winmm.lib winhttp.lib"
 				LinkIncremental="2"
+				AdditionalLibraryDirectories="..\..\..\dependencies\boost-log-2\lib"
 				GenerateDebugInformation="true"
 				SubSystem="2"
 				TargetMachine="1"
@@ -137,6 +138,7 @@
 				Name="VCLinkerTool"
 				AdditionalDependencies="Ws2_32.lib winmm.lib winhttp.lib"
 				LinkIncremental="1"
+				AdditionalLibraryDirectories="..\..\..\dependencies\boost-log-2\lib"
 				IgnoreDefaultLibraryNames=""
 				GenerateDebugInformation="true"
 				SubSystem="2"
@@ -214,6 +216,28 @@
 				>
 			</File>
 			<File
+				RelativePath=".\nxRtmpLogger.cpp"
+				>
+				<FileConfiguration
+					Name="Debug|Win32"
+					>
+					<Tool
+						Name="VCCLCompilerTool"
+						AdditionalIncludeDirectories="..\..\..\NxLogger"
+						PreprocessorDefinitions="BOOST_ALL_DYN_LINK"
+					/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Release|Win32"
+					>
+					<Tool
+						Name="VCCLCompilerTool"
+						AdditionalIncludeDirectories="..\..\..\NxLogger"
+						PreprocessorDefinitions="BOOST_ALL_DYN_LINK"
+					/>
+				</FileConfiguration>
+			</File>
+			<File
 				RelativePath="..\parseurl.c"
 				>
 			</File>
@@ -261,6 +285,10 @@
 			</File>
 			<File
 				RelativePath="..\log.h"
+				>
+			</File>
+			<File
+				RelativePath=".\nxRtmpLogger.h"
 				>
 			</File>
 			<File
