@@ -265,6 +265,7 @@ RTMP_Init(RTMP *r)
   r->m_sb.sb_winhttp_conn_b = NULL;
   r->m_sb.sb_winhttp_req_proxy_conf = FALSE;
   r->m_sb.sb_winhttp_use_auto_proxy = FALSE;
+  r->m_sb.sb_winhttp_use_manual_proxy = FALSE;
   list_init(&r->m_sb.sb_winhttp_req_queue);
   r->m_sb.sb_winhttp_proxy_config = calloc(1, sizeof(WINHTTP_CURRENT_USER_IE_PROXY_CONFIG));
   r->m_sb.sb_winhttp_auto_proxy_opts = calloc(1, sizeof(WINHTTP_AUTOPROXY_OPTIONS));
@@ -843,6 +844,7 @@ RTMP_Connect0(RTMP *r, struct sockaddr * service)
   int on = 1;
   DWORD err;
   wchar_t hostname[256];
+  char tmpBuf[1024];
   int wideHostnameLen;
   BOOL fAutoProxy = FALSE;
   WINHTTP_CURRENT_USER_IE_PROXY_CONFIG ieProxyConfig;
@@ -854,8 +856,30 @@ RTMP_Connect0(RTMP *r, struct sockaddr * service)
   r->m_fDuration = 0.0;
 
   if (r->Link.protocol & RTMP_FEATURE_HTTP) {
+      nx_rtmp_log("RTMP_Connect0: RTMPT connection, determining host proxy configuration");
+
       // 06232012: figure out the proxy configuration
       if( WinHttpGetIEProxyConfigForCurrentUser( r->m_sb.sb_winhttp_proxy_config ) ) {
+          nx_rtmp_log("RTMP_Connect0: Retrieved proxy config from IE.");
+#define DUMP_PROXY_CONFIG_DBG
+#ifdef DUMP_PROXY_CONFIG_DBG
+          _snprintf(tmpBuf, 1023, "\tfAutoDetect %d", r->m_sb.sb_winhttp_proxy_config->fAutoDetect);
+          tmpBuf[1023] = 0;
+          nx_rtmp_log(tmpBuf);
+
+          _snprintf(tmpBuf, 1023, "\tlpszAutoConfigUrl %S", r->m_sb.sb_winhttp_proxy_config->lpszAutoConfigUrl);
+          tmpBuf[1023] = 0;
+          nx_rtmp_log(tmpBuf);
+
+          _snprintf(tmpBuf, 1023, "\tlpszProxy %S", r->m_sb.sb_winhttp_proxy_config->lpszProxy);
+          tmpBuf[1023] = 0;
+          nx_rtmp_log(tmpBuf);
+
+          _snprintf(tmpBuf, 1023, "\tlpszProxyBypass %S", r->m_sb.sb_winhttp_proxy_config->lpszProxyBypass);
+          tmpBuf[1023] = 0;
+          nx_rtmp_log(tmpBuf);
+#endif /* DUMP_PROXY_CONFIG_DBG */
+
           if( r->m_sb.sb_winhttp_proxy_config->fAutoDetect ) {
               r->m_sb.sb_winhttp_use_auto_proxy = TRUE;
           }
@@ -865,9 +889,17 @@ RTMP_Connect0(RTMP *r, struct sockaddr * service)
               r->m_sb.sb_winhttp_auto_proxy_opts->dwFlags |= WINHTTP_AUTOPROXY_CONFIG_URL;
               r->m_sb.sb_winhttp_auto_proxy_opts->lpszAutoConfigUrl = r->m_sb.sb_winhttp_proxy_config->lpszAutoConfigUrl;
           }
+
+          if (!r->m_sb.sb_winhttp_use_auto_proxy && r->m_sb.sb_winhttp_proxy_config->lpszProxy != NULL) {
+              r->m_sb.sb_winhttp_use_manual_proxy = TRUE;
+              r->m_sb.sb_winhttp_auto_proxy_info->dwAccessType = WINHTTP_ACCESS_TYPE_NAMED_PROXY;
+              r->m_sb.sb_winhttp_auto_proxy_info->lpszProxy = r->m_sb.sb_winhttp_proxy_config->lpszProxy;
+              r->m_sb.sb_winhttp_auto_proxy_info->lpszProxyBypass = r->m_sb.sb_winhttp_proxy_config->lpszProxyBypass;
+          }
       }
       else {
           // use autoproxy
+          nx_rtmp_log("RTMP_Connect0: unable to retrieve proxy config for current user, assuming auto-discovery of proxy.");
           r->m_sb.sb_winhttp_use_auto_proxy = TRUE;
       }
 
@@ -909,6 +941,7 @@ RTMP_Connect0(RTMP *r, struct sockaddr * service)
       }
   }
   else {
+      nx_rtmp_log("RTMP_Connect0: RTMP connection, attempting to connect socket");
       r->m_sb.sb_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
       if (r->m_sb.sb_socket != -1)
         {
@@ -3951,6 +3984,7 @@ HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
   DWORD bytesWritten;
   wchar_t hbuf[512];
   wchar_t hurlbuf[512];
+  char tmpBuf[1024];
   wchar_t* acceptTypes[2];
   int activeSockMsgCount;
   char headerBuf[512];
@@ -3983,8 +4017,8 @@ HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
     r->m_msgCounter);
 
   // Configure proxy, if we're using
-  if( r->m_sb.sb_winhttp_use_auto_proxy) {
-      if (r->m_sb.sb_winhttp_req_proxy_conf == FALSE) {
+  if( r->m_sb.sb_winhttp_use_auto_proxy || r->m_sb.sb_winhttp_use_manual_proxy ) {
+      if (r->m_sb.sb_winhttp_use_auto_proxy && r->m_sb.sb_winhttp_req_proxy_conf == FALSE) {
             r->m_sb.sb_winhttp_req_proxy_conf = TRUE;
 
             // Get proxy once here
@@ -3992,6 +4026,12 @@ HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
                 err = GetLastError();
                 RTMP_Log(RTMP_LOGERROR, "HTTP_Post, WinHttpGetProxyForUrl url: %S err: %d", hurlbuf, err);
             }
+            else {
+                _snprintf(tmpBuf, 1023, "HTTP_Post: GetProxyForUrl proxy %S bypass %S", r->m_sb.sb_winhttp_auto_proxy_info->lpszProxy, r->m_sb.sb_winhttp_auto_proxy_info->lpszProxyBypass);
+                tmpBuf[1023] = 0;
+                nx_rtmp_log(tmpBuf);
+            }
+
       }
 
       // Set options here

@@ -151,6 +151,7 @@ extern "C"
     LIST sb_winhttp_req_queue;
     BOOL sb_winhttp_req_proxy_conf;
     BOOL sb_winhttp_use_auto_proxy;
+    BOOL sb_winhttp_use_manual_proxy;
     WINHTTP_CURRENT_USER_IE_PROXY_CONFIG* sb_winhttp_proxy_config;
     WINHTTP_AUTOPROXY_OPTIONS* sb_winhttp_auto_proxy_opts;
     WINHTTP_PROXY_INFO* sb_winhttp_auto_proxy_info;
