@@ -1064,18 +1064,20 @@ RTMP_Connect(RTMP *r, RTMPPacket *cp)
   memset(&service, 0, sizeof(struct sockaddr_in));
   service.sin_family = AF_INET;
 
-  if (r->Link.socksport)
-    {
-      /* Connect via SOCKS */
-      if (!add_addr_info(&service, &r->Link.sockshost, r->Link.socksport))
-	return FALSE;
-    }
-  else
-    {
-      /* Connect directly */
-      if (!add_addr_info(&service, &r->Link.hostname, r->Link.port))
-	return FALSE;
-    }
+  if (!(r->Link.protocol & RTMP_FEATURE_HTTP)) {
+      if (r->Link.socksport)
+        {
+          /* Connect via SOCKS */
+          if (!add_addr_info(&service, &r->Link.sockshost, r->Link.socksport))
+	    return FALSE;
+        }
+      else
+        {
+          /* Connect directly */
+          if (!add_addr_info(&service, &r->Link.hostname, r->Link.port))
+	    return FALSE;
+        }
+  }
 
   if (!RTMP_Connect0(r, (struct sockaddr *)&service))
     return FALSE;
