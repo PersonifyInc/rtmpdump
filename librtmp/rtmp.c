@@ -4025,24 +4025,32 @@ HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
             if (WinHttpGetProxyForUrl(r->m_sb.sb_winhttp_sess, hurlbuf, r->m_sb.sb_winhttp_auto_proxy_opts, r->m_sb.sb_winhttp_auto_proxy_info) == FALSE) {
                 err = GetLastError();
                 RTMP_Log(RTMP_LOGERROR, "HTTP_Post, WinHttpGetProxyForUrl url: %S err: %d", hurlbuf, err);
+
+                _snprintf(tmpBuf, 1023, "HTTP_Post, WinHttpGetProxyForUrl url: %s err: %d", hurlbuf, err);
             }
             else {
                 _snprintf(tmpBuf, 1023, "HTTP_Post: GetProxyForUrl proxy %S bypass %S", r->m_sb.sb_winhttp_auto_proxy_info->lpszProxy, r->m_sb.sb_winhttp_auto_proxy_info->lpszProxyBypass);
-                tmpBuf[1023] = 0;
-                nx_rtmp_log(tmpBuf);
             }
 
+            tmpBuf[1023] = 0;
+            nx_rtmp_log(tmpBuf);
       }
 
       // Set options here
       if (!WinHttpSetOption(activeRequest, WINHTTP_OPTION_PROXY, r->m_sb.sb_winhttp_auto_proxy_info, sizeof(WINHTTP_PROXY_INFO))) {
         err = GetLastError();
         RTMP_Log(RTMP_LOGERROR, "HTTP_Post, WinHttpSetOption for proxy err: %d", err);
+        _snprintf(tmpBuf, 1023, "HTTP_Post, WinHttpSetOption for proxy err: %d", err);
+        tmpBuf[1023] = 0;
+        nx_rtmp_log(tmpBuf);
       }
 
       if (!WinHttpSetOption(activeRequest, WINHTTP_OPTION_AUTOLOGON_POLICY, &autologin_policy, sizeof(unsigned long))) {
         err = GetLastError();
-        RTMP_Log(RTMP_LOGERROR, "HTTP_Post, WinHttpSetOption for proxy err: %d", err);
+        RTMP_Log(RTMP_LOGERROR, "HTTP_Post, WinHttpSetOption for autologon err: %d", err);
+        _snprintf(tmpBuf, 1023, "HTTP_Post, WinHttpSetOption for autologon err: %d", err);
+        tmpBuf[1023] = 0;
+        nx_rtmp_log(tmpBuf);
       }
   }
 
