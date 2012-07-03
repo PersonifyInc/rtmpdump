@@ -882,12 +882,16 @@ RTMP_Connect0(RTMP *r, struct sockaddr * service)
 
           if( r->m_sb.sb_winhttp_proxy_config->fAutoDetect ) {
               r->m_sb.sb_winhttp_use_auto_proxy = TRUE;
+              r->m_sb.sb_winhttp_auto_proxy_opts->dwFlags = WINHTTP_AUTOPROXY_AUTO_DETECT;
+              r->m_sb.sb_winhttp_auto_proxy_opts->dwAutoDetectFlags = WINHTTP_AUTO_DETECT_TYPE_DHCP | WINHTTP_AUTO_DETECT_TYPE_DNS_A;
+              r->m_sb.sb_winhttp_auto_proxy_opts->fAutoLogonIfChallenged = TRUE;
           }
 
           if( r->m_sb.sb_winhttp_proxy_config->lpszAutoConfigUrl != NULL ) {
               r->m_sb.sb_winhttp_use_auto_proxy = TRUE;
               r->m_sb.sb_winhttp_auto_proxy_opts->dwFlags |= WINHTTP_AUTOPROXY_CONFIG_URL;
               r->m_sb.sb_winhttp_auto_proxy_opts->lpszAutoConfigUrl = r->m_sb.sb_winhttp_proxy_config->lpszAutoConfigUrl;
+              r->m_sb.sb_winhttp_auto_proxy_opts->fAutoLogonIfChallenged = TRUE;
           }
 
           if (!r->m_sb.sb_winhttp_use_auto_proxy && r->m_sb.sb_winhttp_proxy_config->lpszProxy != NULL) {
@@ -901,10 +905,6 @@ RTMP_Connect0(RTMP *r, struct sockaddr * service)
           // use autoproxy
           nx_rtmp_log("RTMP_Connect0: unable to retrieve proxy config for current user, assuming auto-discovery of proxy.");
           r->m_sb.sb_winhttp_use_auto_proxy = TRUE;
-      }
-
-      if( r->m_sb.sb_winhttp_use_auto_proxy ) {
-          // basic flags you almost always want
           r->m_sb.sb_winhttp_auto_proxy_opts->dwFlags = WINHTTP_AUTOPROXY_AUTO_DETECT;
           r->m_sb.sb_winhttp_auto_proxy_opts->dwAutoDetectFlags = WINHTTP_AUTO_DETECT_TYPE_DHCP | WINHTTP_AUTO_DETECT_TYPE_DNS_A;
           r->m_sb.sb_winhttp_auto_proxy_opts->fAutoLogonIfChallenged = TRUE;
