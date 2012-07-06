@@ -29,6 +29,7 @@
 
 #include "rtmp_sys.h"
 #include "log.h"
+#include "librtmp/nxRtmpLogger.h"
 
 #define MAX_PRINT_LEN	2048
 
@@ -66,7 +67,9 @@ static void rtmp_log_default(int level, const char *format, va_list vl)
 		}
 		//fprintf(fmsg, "%s: %s\n", levels[level], str);
         sprintf(finalStr, "%u: %s [%d]: %s\n", GetTickCount(), levels[level], GetCurrentThreadId(), str);
-        OutputDebugStringA(finalStr);
+        nx_rtmp_log(finalStr);
+        //OutputDebugStringA(finalStr);
+
 #ifdef _DEBUG_RTMP
 		fflush(fmsg);
 #endif

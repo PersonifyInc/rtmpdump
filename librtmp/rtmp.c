@@ -4063,12 +4063,18 @@ HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
             if (ret == FALSE) {
                 err = GetLastError();
                 RTMP_Log(RTMP_LOGERROR, "HTTP_Post, WinHttpSendRequest err: %d", err);
+                _snprintf(tmpBuf, 1023, "HTTP_Post, WinHttpSendRequest err: %d", err);
+                tmpBuf[1023] = 0;
+                nx_rtmp_log(tmpBuf);
             }
           } while (ret == FALSE && err == ERROR_WINHTTP_RESEND_REQUEST);
       }
       else {
         err = GetLastError();
         RTMP_Log(RTMP_LOGERROR, "HTTP_Post, WinHttpOpenRequest err: %d", err);
+        _snprintf(tmpBuf, 1023, "HTTP_Post, WinHttpOpenRequest err: %d", err);
+        tmpBuf[1023] = 0;
+        nx_rtmp_log(tmpBuf);
       }
 
       RTMP_Log(RTMP_LOGDEBUG, "%s, unacked count: %d.",
@@ -4079,6 +4085,9 @@ HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
       if (ret == FALSE) {
           err = GetLastError();
           RTMP_Log(RTMP_LOGERROR, "HTTP_Post, WinHttpWriteData err: %d", err);
+          _snprintf(tmpBuf, 1023, "HTTP_Post, WinHttpWriteData err: %d", err);
+          tmpBuf[1023] = 0;
+          nx_rtmp_log(tmpBuf);
 
           if (err == ERROR_WINHTTP_RESEND_REQUEST) {
               RTMP_Log(RTMP_LOGINFO, "HTTP_Post, WinHttpWriteData going back to resend request");
@@ -4092,6 +4101,9 @@ HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
       if (ret == FALSE) {
           err = GetLastError();
           RTMP_Log(RTMP_LOGERROR, "HTTP_Post, WinHttpReceiveResponse err: %d", err);
+          _snprintf(tmpBuf, 1023, "HTTP_Post, WinHttpReceiveResponse err: %d", err);
+          tmpBuf[1023] = 0;
+          nx_rtmp_log(tmpBuf);
 
           if (err == ERROR_WINHTTP_RESEND_REQUEST) {
               RTMP_Log(RTMP_LOGINFO, "HTTP_Post, WinHttpReceiveResponse going back to resend request");
@@ -4143,6 +4155,7 @@ HTTP_read(RTMP *r, int fill)
   BOOL ret;
   char *ptr;
   char headerBuf[512];
+  char tmpBuf[1024];
   DWORD err;
   DWORD headerLen = 512;
   DWORD bytesAvail = 0;
@@ -4193,6 +4206,9 @@ HTTP_read(RTMP *r, int fill)
       }
       else { // status != 200
         RTMP_Log(RTMP_LOGINFO, "HTTP_read got non-200 response %d.", status);
+        _snprintf(tmpBuf, 1023, "HTTP_read got non-200 response %d.", status);
+        tmpBuf[1023] = 0;
+        nx_rtmp_log(tmpBuf);
         isNotOk = 1;
       }
 
@@ -4203,6 +4219,9 @@ HTTP_read(RTMP *r, int fill)
   else {
     err = GetLastError();
     RTMP_Log(RTMP_LOGERROR, "HTTP_read error receiving response %d, returning.", err);
+    _snprintf(tmpBuf, 1023, "HTTP_read error receiving response %d, returning.", err);
+    tmpBuf[1023] = 0;
+    nx_rtmp_log(tmpBuf);
     return 0;
   }
   
