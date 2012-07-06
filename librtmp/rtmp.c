@@ -1033,10 +1033,6 @@ RTMP_Connect1(RTMP *r, RTMPPacket *cp)
       // With Wowza, seem to have an issue getting all responses.  Reset unacked count here
       RTMP_Log(RTMP_LOGDEBUG, "%s, resetting unacked count", __FUNCTION__);
       r->m_unackd = 0;
-
-      // Pre-connect/handshake response
-      // Note: with Wowza, this often seems to be missing
-      HTTP_read(r, 1);
   }
 
   if (!SendConnectPacket(r, cp))
@@ -1045,11 +1041,6 @@ RTMP_Connect1(RTMP *r, RTMPPacket *cp)
       RTMP_Close(r);
       return FALSE;
     }
-
-  if (r->Link.protocol & RTMP_FEATURE_HTTP) {
-      // Post-connect response
-      HTTP_read(r, 1);
-  }
 
   return TRUE;
 }
