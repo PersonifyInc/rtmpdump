@@ -992,6 +992,8 @@ RTMP_Connect0(RTMP *r, struct sockaddr * service)
 int
 RTMP_Connect1(RTMP *r, RTMPPacket *cp)
 {
+  LIST_ITEM* ptr_winhttp_req_item = NULL;
+
   if (r->Link.protocol & RTMP_FEATURE_SSL)
     {
 #if defined(CRYPTO) && !defined(NO_SSL)
@@ -1033,6 +1035,16 @@ RTMP_Connect1(RTMP *r, RTMPPacket *cp)
       // With Wowza, seem to have an issue getting all responses.  Reset unacked count here
       RTMP_Log(RTMP_LOGDEBUG, "%s, resetting unacked count", __FUNCTION__);
       r->m_unackd = 0;
+
+      if (list_length(&r->m_sb.sb_winhttp_req_queue) != 0) {
+         RTMP_Log(RTMP_LOGDEBUG, "Cleaning unacked list");
+
+         while (list_pop(&r->m_sb.sb_winhttp_req_queue, &ptr_winhttp_req_item)) {
+            RTMP_Log(RTMP_LOGINFO, "Popping req item ptr: %X", ptr_winhttp_req_item);
+            free(ptr_winhttp_req_item);
+            ptr_winhttp_req_item = NULL;
+         }
+      }
   }
 
   if (!SendConnectPacket(r, cp))
@@ -5042,7 +5054,7 @@ RTMP_Write(RTMP *r, const char *buf, int size)
 
         // Pipeline condition check
         // Do we need to not send yet?
-        if (r->m_unackd > 0)
+        if (r->m_unackd > (int)0)
         // 06012012: disable HTTP pipelining -- wowza seems to be less happy about this
         //if (r->m_unackd > 1)
         {
