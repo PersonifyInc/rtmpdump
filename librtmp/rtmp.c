@@ -4216,8 +4216,8 @@ HTTP_read(RTMP *r, int fill)
       }
 
       // Free stuff
-      free(ptr_winhttp_req_item);
       WinHttpCloseHandle(winhttp_req);
+      free(ptr_winhttp_req_item);
   }
   else {
     err = GetLastError();
