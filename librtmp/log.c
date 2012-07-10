@@ -66,7 +66,7 @@ static void rtmp_log_default(int level, const char *format, va_list vl)
 			neednl = 0;
 		}
 		//fprintf(fmsg, "%s: %s\n", levels[level], str);
-        sprintf(finalStr, "%u: %s [%d]: %s\n", GetTickCount(), levels[level], GetCurrentThreadId(), str);
+        sprintf(finalStr, "%u: %s [%d]: %s", GetTickCount(), levels[level], GetCurrentThreadId(), str);
         nx_rtmp_log(finalStr);
         //OutputDebugStringA(finalStr);
 
