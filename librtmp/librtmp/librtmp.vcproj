@@ -18,7 +18,7 @@
 	<Configurations>
 		<Configuration
 			Name="Debug|Win32"
-			OutputDirectory="..\..\..\bin\$(ConfigurationName)"
+			OutputDirectory="..\..\..\..\bin\$(ConfigurationName)"
 			IntermediateDirectory="$(ConfigurationName)"
 			ConfigurationType="2"
 			CharacterSet="1"
@@ -41,8 +41,8 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories="..\..\..\Presenter_Shared;..\..\zlib-1.2.5\include;..\..\boost-log-2"
-				PreprocessorDefinitions="WIN32;_DEBUG;_WINDOWS;_USRDLL;LIBRTMP_EXPORTS"
+				AdditionalIncludeDirectories="..\..\..\..\Presenter_Shared;..\..\..\zlib-1.2.5\include;..\..\..\boost-log-2;..\..\..\..\NxLogger"
+				PreprocessorDefinitions="WIN32;_DEBUG;_WINDOWS;_USRDLL;LIBRTMP_EXPORTS;NO_CRYPTO"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="3"
@@ -63,7 +63,7 @@
 				Name="VCLinkerTool"
 				AdditionalDependencies="Ws2_32.lib winmm.lib winhttp.lib"
 				LinkIncremental="2"
-				AdditionalLibraryDirectories="..\..\..\dependencies\boost-log-2\lib"
+				AdditionalLibraryDirectories="..\..\..\..\dependencies\boost-log-2\lib"
 				GenerateDebugInformation="true"
 				SubSystem="2"
 				TargetMachine="1"
@@ -92,7 +92,7 @@
 		</Configuration>
 		<Configuration
 			Name="Release|Win32"
-			OutputDirectory="..\..\..\bin\$(ConfigurationName)"
+			OutputDirectory="..\..\..\..\bin\$(ConfigurationName)"
 			IntermediateDirectory="$(ConfigurationName)"
 			ConfigurationType="2"
 			CharacterSet="1"
@@ -117,8 +117,8 @@
 				Name="VCCLCompilerTool"
 				Optimization="2"
 				EnableIntrinsicFunctions="true"
-				AdditionalIncludeDirectories="..\..\..\Presenter_Shared;..\..\zlib-1.2.5\include;..\..\boost-log-2"
-				PreprocessorDefinitions="WIN32;NDEBUG;_WINDOWS;_USRDLL;LIBRTMP_EXPORTS"
+				AdditionalIncludeDirectories="..\..\..\..\Presenter_Shared;..\..\..\zlib-1.2.5\include;..\..\..\boost-log-2;..\..\..\..\NxLogger"
+				PreprocessorDefinitions="WIN32;NDEBUG;_WINDOWS;_USRDLL;LIBRTMP_EXPORTS;NO_CRYPTO"
 				RuntimeLibrary="2"
 				EnableFunctionLevelLinking="true"
 				UsePrecompiledHeader="0"
@@ -138,7 +138,7 @@
 				Name="VCLinkerTool"
 				AdditionalDependencies="Ws2_32.lib winmm.lib winhttp.lib"
 				LinkIncremental="1"
-				AdditionalLibraryDirectories="..\..\..\dependencies\boost-log-2\lib"
+				AdditionalLibraryDirectories="..\..\..\..\dependencies\boost-log-2\lib"
 				IgnoreDefaultLibraryNames=""
 				GenerateDebugInformation="true"
 				SubSystem="2"
