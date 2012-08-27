@@ -172,7 +172,8 @@ HTTP_get(struct HTTP_ctx *http, const char *url, HTTP_read_callback *cb)
 #endif
     }
 #endif
-  RTMPSockBuf_Send(&sb, sb.sb_buf, i);
+
+  RTMPSockBuf_Send(&sb, sb.sb_buf, i, NULL);
 
   /* set timeout */
 #define HTTP_TIMEOUT	5

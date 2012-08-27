@@ -106,7 +106,8 @@ extern "C"
 #define RTMP_PACKET_SIZE_MINIMUM  3
 
   typedef int (*RTMP_INVOCATION_HANDLER)(AMFObject *obj,void* pCtx);
-  
+  typedef int (*RTMP_NETWORK_STATS_HANDLER)(unsigned __int64 ts, unsigned int bytes, void* pCtx);
+
   typedef struct RTMPChunk
   {
     int c_headerSize;
@@ -310,6 +311,16 @@ extern "C"
 
     RTMP_INVOCATION_HANDLER userHandler;
     void                    *userHandlerCtx;
+
+    RTMP_NETWORK_STATS_HANDLER  netstatHandler;
+    void                        *netstatHandlerCtx;
+
+    //this is used to compute the bitrate over the life of the object
+    //they are mostly informative, they are to coarse to make any decision
+    unsigned __int64    m_bytesSend;
+    unsigned __int64    m_timeBegin;
+    unsigned __int64    m_timeEnd;
+
   } RTMP;
 
   int LIBRTMP_API RTMP_ParseURL(const char *url, int *protocol, AVal *host,
@@ -383,7 +394,7 @@ extern "C"
 				      AMFObjectProperty * p);
 
   int LIBRTMP_API RTMPSockBuf_Fill(RTMPSockBuf *sb);
-  int LIBRTMP_API RTMPSockBuf_Send(RTMPSockBuf *sb, const char *buf, int len);
+  int LIBRTMP_API RTMPSockBuf_Send(RTMPSockBuf *sb, const char *buf, int len, RTMP* r);
   int LIBRTMP_API RTMPSockBuf_Close(RTMPSockBuf *sb);
 
   int LIBRTMP_API RTMP_SendCreateStream(RTMP *r);
@@ -399,6 +410,8 @@ extern "C"
 /* hashswf.c */
   int LIBRTMP_API RTMP_HashSWF(const char *url, unsigned int *size, unsigned char *hash,
 		   int age);
+
+  void LIBRTMP_API RTMP_FlushSend(RTMP *r);
 
 #ifdef __cplusplus
 };

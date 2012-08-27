@@ -35,6 +35,26 @@
 #include "log.h"
 #include "librtmp/nxRtmpLogger.h"
 
+unsigned __int64 getNow()
+{
+    LARGE_INTEGER liPerfNow;
+    LARGE_INTEGER liPerfFreq;
+    QueryPerformanceFrequency(&liPerfFreq);
+    QueryPerformanceCounter(&liPerfNow);
+    return(((liPerfNow.QuadPart) * 1000)
+        / liPerfFreq.QuadPart);
+}
+
+unsigned __int64 getElapsedTime(unsigned __int64 begin)
+{
+    LARGE_INTEGER liPerfNow;
+    LARGE_INTEGER liPerfFreq;
+    QueryPerformanceFrequency(&liPerfFreq);
+    QueryPerformanceCounter(&liPerfNow);
+    return(((liPerfNow.QuadPart - begin) * 1000)
+        / liPerfFreq.QuadPart);
+}
+
 #ifdef CRYPTO
 #ifdef USE_POLARSSL
 #include <polarssl/havege.h>
@@ -283,6 +303,12 @@ RTMP_Init(RTMP *r)
   r->Link.swfAge = 30;
   r->userHandler = NULL;
   r->userHandlerCtx = NULL;
+  r->netstatHandler = NULL;
+  r->netstatHandlerCtx = NULL;
+
+  r->m_bytesSend = 0;
+  r->m_timeBegin = getNow();
+  r->m_timeEnd   = 0;
 }
 
 void
@@ -421,7 +447,7 @@ RTMP_SetupStream(RTMP *r,
   if (sockshost->av_len)
     {
       const char *socksport = strchr(sockshost->av_val, ':');
-      char *hostname = strdup(sockshost->av_val);
+      char *hostname = _strdup(sockshost->av_val);
 
       if (socksport)
 	hostname[socksport - sockshost->av_val] = '\0';
@@ -1574,6 +1600,17 @@ CollectN(const char *buffer, int n)
   return FALSE;
 }
 
+void RTMP_FlushSend(RTMP *r)
+{
+    DWORD dwReturned = 0;
+    int nRet = WSAIoctl(r->m_sb.sb_socket,SIO_FLUSH,NULL,0,NULL,0,&dwReturned,NULL,NULL);
+    if(nRet != 0){
+        int nnn = WSAGetLastError();
+        OutputDebugStringA("sdfsdf");
+    }
+}
+
+
 static int
 WriteN(RTMP *r, const char *buffer, int n)
 {
@@ -1600,7 +1637,7 @@ WriteN(RTMP *r, const char *buffer, int n)
       if (r->Link.protocol & RTMP_FEATURE_HTTP)
         nBytes = HTTP_Post(r, RTMPT_SEND, ptr, n);
       else
-        nBytes = RTMPSockBuf_Send(&r->m_sb, ptr, n);
+        nBytes = RTMPSockBuf_Send(&r->m_sb, ptr, n, r);
       /*RTMP_Log(RTMP_LOGDEBUG, "%s: %d\n", __FUNCTION__, nBytes); */
 
       if (nBytes < 0)
@@ -3700,6 +3737,8 @@ RTMP_Close(RTMP *r)
 
   RTMP_Log(RTMP_LOGINFO, "+RTMP_Close");
 
+  r->m_timeEnd = RTMP_GetTime();
+
   if (RTMP_IsConnected(r))
     {
       if (r->m_stream_id > 0)
@@ -3793,6 +3832,15 @@ RTMP_Close(RTMP *r)
       r->Link.rc4keyOut = NULL;
     }
 #endif
+
+  {
+      char rr[512];
+      double bitrt = (double)r->m_bytesSend*1000.0/((r->m_timeEnd - r->m_timeBegin));
+      bitrt /= 128;
+      sprintf(rr,"Bitrate: %f Kbps\n",bitrt);
+      OutputDebugStringA(rr);
+  }
+
 }
 
 int
@@ -3852,7 +3900,7 @@ RTMPSockBuf_Fill(RTMPSockBuf *sb)
 }
 
 int
-RTMPSockBuf_Send(RTMPSockBuf *sb, const char *buf, int len)
+RTMPSockBuf_Send(RTMPSockBuf *sb, const char *buf, int len,RTMP* r)
 {
   int rc;
 
@@ -3868,9 +3916,22 @@ RTMPSockBuf_Send(RTMPSockBuf *sb, const char *buf, int len)
     }
   else
 #endif
-    {
-        rc = send(sb->sb_socket, buf, len, 0);
-    }
+  {
+      rc = send(sb->sb_socket, buf, len, 0);
+      if(rc!=SOCKET_ERROR){
+          if(r) {
+              r->m_bytesSend+=rc;
+              if(r->netstatHandler){
+                //(*r->netstatHandler)( getElapsedTime(r->m_timeBegin), rc, r->netstatHandlerCtx);
+                (*r->netstatHandler)( getNow(), rc, r->netstatHandlerCtx);
+              }
+          }
+      }
+      else
+      {
+          //wouldn't it be nice to have some message here
+      }
+  }
   return rc;
 }
 
@@ -4115,6 +4176,7 @@ HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
       }
   } while (ret == FALSE);
 
+  //andrey: we do not use this anymore?
   //RTMPSockBuf_Send(&r->m_sb, hbuf, hlen);
   //hlen = RTMPSockBuf_Send(&r->m_sb, buf, len);
   r->m_msgCounter++;
