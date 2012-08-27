@@ -29,8 +29,8 @@
 
 #ifdef _MSC_VER	/* MSVC */
 #define snprintf _snprintf
-#define strcasecmp stricmp
-#define strncasecmp strnicmp
+#define strcasecmp _stricmp //silence the compiler
+#define strncasecmp _strnicmp //silence the compiler
 //#define vsnprintf _vsnprintf
 #endif
 
