@@ -26,6 +26,8 @@
 
 #include <assert.h>
 #include <ctype.h>
+#include <winsock2.h>
+#include <winhttp.h>
 
 #include "rtmp_sys.h"
 #include "log.h"

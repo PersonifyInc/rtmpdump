@@ -26,6 +26,7 @@
 
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <winhttp.h>
 
 #ifdef _MSC_VER	/* MSVC */
 #define snprintf _snprintf

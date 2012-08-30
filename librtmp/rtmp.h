@@ -131,14 +131,14 @@ extern "C"
   } RTMPPacket;
 
   // Forward declaraction of struct types -- nasty hack since winhttp and wininet don't play nice
-#if 1
-#ifndef WINHTTPAPI
-  typedef LPVOID HINTERNET;
-  typedef struct { int a; } WINHTTP_CURRENT_USER_IE_PROXY_CONFIG;
-  typedef struct { int a; } WINHTTP_AUTOPROXY_OPTIONS;
-  typedef struct { int a; } WINHTTP_PROXY_INFO;
-#endif /* WINHTTPAPI */
-#endif
+//#if 1
+//#ifndef WINHTTPAPI
+//  typedef LPVOID HINTERNET;
+//  typedef struct { int a; } WINHTTP_CURRENT_USER_IE_PROXY_CONFIG;
+//  typedef struct { int a; } WINHTTP_AUTOPROXY_OPTIONS;
+//  typedef struct { int a; } WINHTTP_PROXY_INFO;
+//#endif // WINHTTPAPI
+//#endif
 
   typedef struct RTMPSockBuf
   {
