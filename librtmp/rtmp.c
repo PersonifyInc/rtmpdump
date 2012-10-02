@@ -1043,8 +1043,16 @@ RTMP_Connect1(RTMP *r, RTMPPacket *cp)
       r->m_msgCounter = 1;
       r->m_clientID.av_val = NULL;
       r->m_clientID.av_len = 0;
-      HTTP_Post(r, RTMPT_OPEN, "", 1);
-      HTTP_read(r, 1);
+      if (HTTP_Post(r, RTMPT_OPEN, "", 1) < 0) {
+          RTMP_Log(RTMP_LOGERROR, "%s, unable to establish HTTP (RTMPT) connection. Bailing.", __FUNCTION__);
+          RTMP_Close(r);
+          return FALSE;
+      }
+      if (HTTP_read(r, 1) < 0) {
+          RTMP_Log(RTMP_LOGERROR, "%s, unable to read from HTTP (RTMPT) connection. Bailing.", __FUNCTION__);
+          RTMP_Close(r);
+          return FALSE;
+      }
 
       r->m_msgCounter = 0;
     }
@@ -4132,6 +4140,12 @@ HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
                 nx_rtmp_log(tmpBuf);
             }
           } while (ret == FALSE && err == ERROR_WINHTTP_RESEND_REQUEST);
+
+          if (ret == FALSE) {
+              // Serious error here with HTTP connectivity, bail
+              RTMP_Log(RTMP_LOGERROR, "HTTP_Post, WinHttpSendRequest has unrecoverable error.");
+              return -1;
+          }
       }
       else {
         err = GetLastError();
@@ -4156,6 +4170,11 @@ HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
           if (err == ERROR_WINHTTP_RESEND_REQUEST) {
               RTMP_Log(RTMP_LOGINFO, "HTTP_Post, WinHttpWriteData going back to resend request");
               continue;
+          }
+          else {
+              // Serious error here with HTTP connectivity, bail
+              RTMP_Log(RTMP_LOGERROR, "HTTP_Post, WinHttpWriteData has unrecoverable error.");
+              return -1;
           }
       }
 
@@ -4396,6 +4415,8 @@ HTTP_read(RTMP *r, int fill)
   }
 
   RTMP_Log(RTMP_LOGINFO, "-HTTP_read numResp %d numResp_b %d read socket %d size %d resplen %d timeout %d", r->m_sb.sb_http_resp, r->m_sb.sb_http_resp_b, r->m_sb.sb_active_read_socket, r->m_sb.sb_size, r->m_resplen, r->m_sb.sb_timedout);
+
+  if (isNotOk) return -1;
 
   return 0;
 }
