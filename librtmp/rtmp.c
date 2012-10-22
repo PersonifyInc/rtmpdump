@@ -3956,10 +3956,25 @@ RTMPSockBuf_Close(RTMPSockBuf *sb)
 #endif
 
   // Clean-up WinHttp structures/handles used for RTMPT support.
-  if (sb->sb_winhttp_conn) WinHttpCloseHandle(sb->sb_winhttp_conn);
-  if (sb->sb_winhttp_conn_b) WinHttpCloseHandle(sb->sb_winhttp_conn_b);
-  if (sb->sb_winhttp_sess) WinHttpCloseHandle(sb->sb_winhttp_sess);
-  if (sb->sb_winhttp_sess_b) WinHttpCloseHandle(sb->sb_winhttp_sess_b);
+    if (sb->sb_winhttp_conn) {
+        WinHttpCloseHandle(sb->sb_winhttp_conn);
+        sb->sb_winhttp_conn = NULL;
+    }
+
+    if (sb->sb_winhttp_conn_b) {
+        WinHttpCloseHandle(sb->sb_winhttp_conn_b);
+        sb->sb_winhttp_conn_b = NULL;
+    }
+
+    if (sb->sb_winhttp_sess) {
+        WinHttpCloseHandle(sb->sb_winhttp_sess);
+        sb->sb_winhttp_sess = NULL;
+    }
+
+    if (sb->sb_winhttp_sess_b) {
+        WinHttpCloseHandle(sb->sb_winhttp_sess_b);
+        sb->sb_winhttp_sess_b = NULL;
+    }
   if (sb->sb_winhttp_proxy_config) {
       free(sb->sb_winhttp_proxy_config);
       sb->sb_winhttp_proxy_config = NULL;
