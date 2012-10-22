@@ -413,6 +413,8 @@ extern "C"
 
   void LIBRTMP_API RTMP_FlushSend(RTMP *r);
 
+  int LIBRTMP_API RTMP_GetNetworkError();
+
 #ifdef __cplusplus
 };
 #endif

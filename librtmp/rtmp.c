@@ -143,6 +143,12 @@ static void DecodeTEA(AVal *key, AVal *text);
 static int HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len);
 static int HTTP_read(RTMP *r, int fill);
 
+static int g_NetworkErrorExternal; //used to pass Winsock error codes to the app
+
+void SetNetworkErrorExternal(int e){
+    g_NetworkErrorExternal = e;
+}
+
 //static int StartSocketConnection(RTMP *r, int IsSecondSocket);
 
 #ifndef _WIN32
@@ -1680,6 +1686,12 @@ WriteN(RTMP *r, const char *buffer, int n)
 
       //now call RTMP_Close. It will follow a safe path now.
       RTMP_Close(r);
+
+      if (!(r->Link.protocol & RTMP_FEATURE_HTTP))
+      {
+        //we set the error in HTTP_Post if we are doing RTMPT
+        SetNetworkErrorExternal(sockerr);
+      }
 
       //now something interesting. How we handle different errors.
       //this is what I have observed:
@@ -5214,4 +5226,9 @@ RTMP_Write(RTMP *r, const char *buf, int size)
 	}
     }
   return size+s2;
+}
+
+int RTMP_GetNetworkError()
+{
+    return g_NetworkErrorExternal;
 }
