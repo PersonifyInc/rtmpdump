@@ -1622,6 +1622,7 @@ void RTMP_FlushSend(RTMP *r)
 static int
 WriteN(RTMP *r, const char *buffer, int n)
 {
+  int shutdown_err = 0;
   const char *ptr = buffer;
 #ifdef CRYPTO
   char *encrypted = 0;
@@ -1662,7 +1663,34 @@ WriteN(RTMP *r, const char *buffer, int n)
 	  if (sockerr == EINTR && !RTMP_ctrlC)
 	    continue;
 
-	  RTMP_Close(r);
+
+     //at this point do not call RTMP_Close without shuting down the socket
+     //RTMP_Close will try to send message to the server which will fail and
+     //call RTMP_Close again, eventually overflowing the stack
+
+      //close the socket, ignore the error code but log it
+      shutdown_err = RTMPSockBuf_Close(&r->m_sb);
+      if(shutdown_err!=0) {
+          //I do not think shutdown_err is a WSA* error code. WSA* is more useful
+          RTMP_Log(RTMP_LOGERROR, "%s, RTMPSockBuf_Close error %d", __FUNCTION__, shutdown_err);
+      }
+
+      //this disconnectes the socket if we are using RTMP. For RTMPT see RTMP_IsConnected
+      r->m_sb.sb_socket = -1;
+
+      //now call RTMP_Close. It will follow a safe path now.
+      RTMP_Close(r);
+
+      //now something interesting. How we handle different errors.
+      //this is what I have observed:
+      //If I kill the server I get WSAECONNABORTED
+      //If shut down or disable the wireless adapter or put the laptop in standby I get WSAECONNRESET
+      //I guess the questions are:
+      //Should I check for other errors?
+      //Should I try to reconect after a server error? [WSAECONNABORTED]
+      //Should I try to reconnect after a client error? [WSAECONNRESET]
+      //All this is TBD, now I just want to avoid a stackoverflow
+
 	  n = 1;
 	  break;
 	}
@@ -3760,12 +3788,16 @@ RTMP_Close(RTMP *r)
       if (r->m_clientID.av_val)
         {
 	  HTTP_Post(r, RTMPT_CLOSE, "", 1);
-	  free(r->m_clientID.av_val);
-	  r->m_clientID.av_val = NULL;
-	  r->m_clientID.av_len = 0;
 	}
       RTMPSockBuf_Close(&r->m_sb);
     }
+
+  if (r->m_clientID.av_val)
+  {
+    free(r->m_clientID.av_val);
+    r->m_clientID.av_val = NULL;
+    r->m_clientID.av_len = 0;
+  }
 
   r->m_stream_id = -1;
   r->m_sb.sb_socket = -1;
