@@ -4153,6 +4153,10 @@ HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
                 _snprintf(tmpBuf, 1023, "HTTP_Post, WinHttpSendRequest err: %d", err);
                 tmpBuf[1023] = 0;
                 nx_rtmp_log(tmpBuf);
+                if(err!=ERROR_WINHTTP_RESEND_REQUEST){
+                    SetNetworkErrorExternal(err);
+                    return -1;
+                }
             }
           } while (ret == FALSE && err == ERROR_WINHTTP_RESEND_REQUEST);
 
