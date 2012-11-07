@@ -4240,6 +4240,15 @@ HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
               return -1;
           }
       }
+	  else
+	  {
+		  if(r) {
+			  r->m_bytesSend+=bytesWritten;
+			  if(r->netstatHandler){
+				  (*r->netstatHandler)( getNow(), bytesWritten, r->netstatHandlerCtx);
+			  }
+		  }
+	  }
 
       /* Ensure request was received w/o error -- and check for any proxy login requirements */
       ret = WinHttpReceiveResponse(activeRequest, NULL);
