@@ -1026,7 +1026,8 @@ RTMP_Connect1(RTMP *r, RTMPPacket *cp)
 {
   LIST_ITEM* ptr_winhttp_req_item = NULL;
 
-  if (r->Link.protocol & RTMP_FEATURE_SSL)
+  if (r->Link.protocol & RTMP_FEATURE_SSL && 
+      !(r->Link.protocol & RTMP_FEATURE_HTTP))
     {
 #if defined(CRYPTO) && !defined(NO_SSL)
       TLS_client(RTMP_TLS_ctx, r->m_sb.sb_ssl);
