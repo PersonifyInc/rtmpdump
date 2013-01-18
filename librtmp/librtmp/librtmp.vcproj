@@ -41,8 +41,8 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories="..\..\..\..\Presenter_Shared;..\..\..\zlib-1.2.5\include;..\..\..\boost-log-2;..\..\..\..\NxLogger"
-				PreprocessorDefinitions="WIN32;_DEBUG;_WINDOWS;_USRDLL;LIBRTMP_EXPORTS;NO_CRYPTO;_CRT_SECURE_NO_WARNINGS"
+				AdditionalIncludeDirectories="..\..\..\..\Presenter_Shared;&quot;..\..\..\zlib-1.2.5\include&quot;;&quot;..\..\..\boost-log-2&quot;;..\..\..\..\NxLogger;&quot;..\..\..\..\dependencies\openssl-1.0.1c\include&quot;"
+				PreprocessorDefinitions="WIN32;_DEBUG;_WINDOWS;_USRDLL;LIBRTMP_EXPORTS;CRYPTO;_CRT_SECURE_NO_WARNINGS"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="3"
@@ -61,9 +61,9 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="Ws2_32.lib winmm.lib winhttp.lib"
+				AdditionalDependencies="Ws2_32.lib winmm.lib winhttp.lib  libeay32.lib ssleay32.lib zlib.lib"
 				LinkIncremental="2"
-				AdditionalLibraryDirectories="..\..\..\..\dependencies\boost-log-2\lib"
+				AdditionalLibraryDirectories="..\..\..\..\dependencies\boost-log-2\lib;&quot;..\..\..\..\dependencies\openssl-1.0.1c\lib&quot;;&quot;..\..\..\..\dependencies\zlib-1.2.5\lib&quot;"
 				GenerateDebugInformation="true"
 				SubSystem="2"
 				TargetMachine="1"
@@ -117,7 +117,7 @@
 				Name="VCCLCompilerTool"
 				Optimization="2"
 				EnableIntrinsicFunctions="true"
-				AdditionalIncludeDirectories="..\..\..\..\Presenter_Shared;&quot;..\..\..\zlib-1.2.5\include&quot;;&quot;..\..\..\boost-log-2&quot;;..\..\..\..\NxLogger;&quot;C:\OpenSSL-Win32\include&quot;"
+				AdditionalIncludeDirectories="..\..\..\..\Presenter_Shared;&quot;..\..\..\zlib-1.2.5\include&quot;;&quot;..\..\..\boost-log-2&quot;;..\..\..\..\NxLogger;&quot;..\..\..\..\dependencies\openssl-1.0.1c\include&quot;"
 				PreprocessorDefinitions="WIN32;NDEBUG;_WINDOWS;_USRDLL;LIBRTMP_EXPORTS;CRYPTO;_CRT_SECURE_NO_WARNINGS"
 				RuntimeLibrary="2"
 				EnableFunctionLevelLinking="true"
@@ -136,9 +136,9 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="Ws2_32.lib winmm.lib winhttp.lib libeay32MD.lib ssleay32MD.lib zlib.lib"
+				AdditionalDependencies="Ws2_32.lib winmm.lib winhttp.lib libeay32.lib ssleay32.lib zlib.lib"
 				LinkIncremental="1"
-				AdditionalLibraryDirectories="&quot;..\..\..\..\dependencies\boost-log-2\lib&quot;;&quot;C:\OpenSSL-Win32\lib\VC&quot;;&quot;..\..\..\..\dependencies\zlib-1.2.5\lib&quot;"
+				AdditionalLibraryDirectories="&quot;..\..\..\..\dependencies\boost-log-2\lib&quot;;&quot;..\..\..\..\dependencies\openssl-1.0.1c\lib&quot;;&quot;..\..\..\..\dependencies\zlib-1.2.5\lib&quot;"
 				IgnoreDefaultLibraryNames=""
 				GenerateDebugInformation="true"
 				SubSystem="2"
