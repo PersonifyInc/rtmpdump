@@ -35,6 +35,10 @@
 #include <stdint.h>
 #include <stddef.h>
 
+#ifdef EWOULDBLOCK
+#undef EWOULDBLOCK
+#endif
+#define EWOULDBLOCK	WSAETIMEDOUT	/* we don't use nonblocking, but we do use timeouts */
 #include "amf.h"
 #include "list.h"
 
