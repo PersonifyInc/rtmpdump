@@ -953,7 +953,7 @@ RTMP_Connect0(RTMP *r, struct sockaddr * service)
         0);
 
       if (r->m_sb.sb_winhttp_sess) {
-        r->m_sb.sb_winhttp_conn = WinHttpConnect(r->m_sb.sb_winhttp_sess, hostname, INTERNET_DEFAULT_HTTPS_PORT, 0);
+        r->m_sb.sb_winhttp_conn = WinHttpConnect(r->m_sb.sb_winhttp_sess, hostname, r->Link.port, 0);
         if (!r->m_sb.sb_winhttp_conn) {
             err = GetLastError();
             RTMP_Log(RTMP_LOGERROR, "%s, failed to establish WinHttpConnection %d", __FUNCTION__, err);
@@ -965,7 +965,7 @@ RTMP_Connect0(RTMP *r, struct sockaddr * service)
         0);
 
       if (r->m_sb.sb_winhttp_sess_b) {
-        r->m_sb.sb_winhttp_conn_b = WinHttpConnect(r->m_sb.sb_winhttp_sess_b, hostname, INTERNET_DEFAULT_HTTPS_PORT, 0);
+        r->m_sb.sb_winhttp_conn_b = WinHttpConnect(r->m_sb.sb_winhttp_sess_b, hostname, r->Link.port, 0);
         if (!r->m_sb.sb_winhttp_conn_b) {
             err = GetLastError();
             RTMP_Log(RTMP_LOGERROR, "%s, failed to establish WinHttpConnection B %d", __FUNCTION__, err);
@@ -4142,13 +4142,22 @@ HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
 
   activeConnection = r->m_sb.sb_active_write_socket == 0 ? r->m_sb.sb_winhttp_conn : r->m_sb.sb_winhttp_conn_b;
   RTMP_Log(RTMP_LOGINFO, "HTTP_Post using connection %X\n", activeConnection);
-  activeRequest = WinHttpOpenRequest(activeConnection, L"POST", hurlbuf, NULL, WINHTTP_NO_REFERER, acceptTypes, WINHTTP_FLAG_SECURE);
-
-  hlen = _snwprintf(hurlbuf, 512, L"https://%.*S/%S%S/%d",
-    r->Link.hostname.av_len, r->Link.hostname.av_val,
-    RTMPT_cmds[cmd],
-    r->m_clientID.av_val ? r->m_clientID.av_val : "",
-    r->m_msgCounter);
+  if (r->Link.protocol & RTMP_FEATURE_SSL) {
+	  activeRequest = WinHttpOpenRequest(activeConnection, L"POST", hurlbuf, NULL, WINHTTP_NO_REFERER, acceptTypes, WINHTTP_FLAG_SECURE);
+	  hlen = _snwprintf(hurlbuf, 512, L"https://%.*S/%S%S/%d",
+		  r->Link.hostname.av_len, r->Link.hostname.av_val,
+		  RTMPT_cmds[cmd],
+		  r->m_clientID.av_val ? r->m_clientID.av_val : "",
+		  r->m_msgCounter);
+  }
+  else{
+	  activeRequest = WinHttpOpenRequest(activeConnection, L"POST", hurlbuf, NULL, WINHTTP_NO_REFERER, acceptTypes, 0);
+	  hlen = _snwprintf(hurlbuf, 512, L"http://%.*S/%S%S/%d",
+		  r->Link.hostname.av_len, r->Link.hostname.av_val,
+		  RTMPT_cmds[cmd],
+		  r->m_clientID.av_val ? r->m_clientID.av_val : "",
+		  r->m_msgCounter);
+  }
 
   // Configure proxy, if we're using
   if( r->m_sb.sb_winhttp_use_auto_proxy || r->m_sb.sb_winhttp_use_manual_proxy ) {
