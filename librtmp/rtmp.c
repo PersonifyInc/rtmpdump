@@ -27,32 +27,43 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#ifdef __APPLE__
+#define SOCKET_ERROR (-1)
+#else
 #include <process.h>
 #include <winsock2.h>
 #include <winhttp.h>
-
+#endif
 #include "rtmp_sys.h"
 #include "log.h"
 #include "librtmp/nxRtmpLogger.h"
 
-unsigned __int64 getNow()
+uint64_t getNow()
 {
+#ifdef __APPLE__
+    return 0;
+#else
     LARGE_INTEGER liPerfNow;
     LARGE_INTEGER liPerfFreq;
     QueryPerformanceFrequency(&liPerfFreq);
     QueryPerformanceCounter(&liPerfNow);
     return(((liPerfNow.QuadPart) * 1000)
         / liPerfFreq.QuadPart);
+#endif
 }
 
-unsigned __int64 getElapsedTime(unsigned __int64 begin)
+uint64_t getElapsedTime(uint64_t begin)
 {
+#ifdef __APPLE__
+    return 0;
+#else
     LARGE_INTEGER liPerfNow;
     LARGE_INTEGER liPerfFreq;
     QueryPerformanceFrequency(&liPerfFreq);
     QueryPerformanceCounter(&liPerfNow);
     return(((liPerfNow.QuadPart - begin) * 1000)
         / liPerfFreq.QuadPart);
+#endif
 }
 
 #ifdef CRYPTO
@@ -141,7 +152,6 @@ static int WriteN(RTMP *r, const char *buffer, int n);
 static void DecodeTEA(AVal *key, AVal *text);
 
 static int HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len);
-static int HTTP_read(RTMP *r, int fill);
 
 static int g_NetworkErrorExternal; //used to pass Winsock error codes to the app
 
@@ -285,6 +295,8 @@ RTMP_Init(RTMP *r)
   r->m_sb.sb_active_read_socket = 0;
   r->m_sb.sb_active_write_socket = 0;
   r->m_sb.sb_socket = -1;
+#ifdef __APPLE__
+#else
   r->m_sb.sb_winhttp_sess = NULL;
   r->m_sb.sb_winhttp_sess_b = NULL;
   r->m_sb.sb_winhttp_conn = NULL;
@@ -296,6 +308,7 @@ RTMP_Init(RTMP *r)
   r->m_sb.sb_winhttp_proxy_config = calloc(1, sizeof(WINHTTP_CURRENT_USER_IE_PROXY_CONFIG));
   r->m_sb.sb_winhttp_auto_proxy_opts = calloc(1, sizeof(WINHTTP_AUTOPROXY_OPTIONS));
   r->m_sb.sb_winhttp_auto_proxy_info = calloc(1, sizeof(WINHTTP_PROXY_INFO));
+#endif
   r->m_fPublishing = FALSE;
   r->m_inChunkSize = RTMP_DEFAULT_CHUNKSIZE;
   r->m_outChunkSize = RTMP_DEFAULT_CHUNKSIZE;
@@ -333,7 +346,11 @@ int
 RTMP_IsConnected(RTMP *r)
 {
     if (r->Link.protocol & RTMP_FEATURE_HTTP) {
-        return (r->m_sb.sb_winhttp_conn != NULL) || (r->m_sb.sb_winhttp_conn_b != NULL); 
+#ifdef __APPLE__
+        return FALSE;
+#else
+        return (r->m_sb.sb_winhttp_conn != NULL) || (r->m_sb.sb_winhttp_conn_b != NULL);
+#endif
     }
 
     return r->m_sb.sb_socket != -1;
@@ -453,7 +470,7 @@ RTMP_SetupStream(RTMP *r,
   if (sockshost->av_len)
     {
       const char *socksport = strchr(sockshost->av_val, ':');
-      char *hostname = _strdup(sockshost->av_val);
+      char *hostname = strdup(sockshost->av_val);
 
       if (socksport)
 	hostname[socksport - sockshost->av_val] = '\0';
@@ -874,22 +891,26 @@ int
 RTMP_Connect0(RTMP *r, struct sockaddr * service)
 {
   int on = 1;
-  DWORD err;
+  uint32_t err;
   wchar_t hostname[256];
   char tmpBuf[1024];
   int wideHostnameLen;
-  BOOL fAutoProxy = FALSE;
+  int fAutoProxy = FALSE;
+#ifdef __APPLE__
+#else
   WINHTTP_CURRENT_USER_IE_PROXY_CONFIG ieProxyConfig;
   WINHTTP_AUTOPROXY_OPTIONS autoProxyOptions;
   WINHTTP_PROXY_INFO autoProxyInfo;
-
+#endif
   r->m_sb.sb_timedout = FALSE;
   r->m_pausing = 0;
   r->m_fDuration = 0.0;
 
   if (r->Link.protocol & RTMP_FEATURE_HTTP) {
       nx_rtmp_log("RTMP_Connect0: RTMPT connection, determining host proxy configuration");
-
+#ifdef __APPLE__
+      nx_rtmp_log("RTMP_Connect0: RTMPT not supported on OSX...yet.");
+#else
       // 06232012: figure out the proxy configuration
       if( WinHttpGetIEProxyConfigForCurrentUser( r->m_sb.sb_winhttp_proxy_config ) ) {
           nx_rtmp_log("RTMP_Connect0: Retrieved proxy config from IE.");
@@ -971,6 +992,7 @@ RTMP_Connect0(RTMP *r, struct sockaddr * service)
             RTMP_Log(RTMP_LOGERROR, "%s, failed to establish WinHttpConnection B %d", __FUNCTION__, err);
         }
       }
+#endif
   }
   else {
       nx_rtmp_log("RTMP_Connect0: RTMP connection, attempting to connect socket");
@@ -1075,7 +1097,8 @@ RTMP_Connect1(RTMP *r, RTMPPacket *cp)
       // With Wowza, seem to have an issue getting all responses.  Reset unacked count here
       RTMP_Log(RTMP_LOGDEBUG, "%s, resetting unacked count", __FUNCTION__);
       r->m_unackd = 0;
-
+#ifdef __APPLE__
+#else
       if (list_length(&r->m_sb.sb_winhttp_req_queue) != 0) {
          RTMP_Log(RTMP_LOGDEBUG, "Cleaning unacked list");
 
@@ -1085,6 +1108,7 @@ RTMP_Connect1(RTMP *r, RTMPPacket *cp)
             ptr_winhttp_req_item = NULL;
          }
       }
+#endif
   }
 
   if (!SendConnectPacket(r, cp))
@@ -1616,12 +1640,15 @@ CollectN(const char *buffer, int n)
 
 void RTMP_FlushSend(RTMP *r)
 {
-    DWORD dwReturned = 0;
+    uint32_t dwReturned = 0;
+#ifdef __APPLE__
+#else
     int nRet = WSAIoctl(r->m_sb.sb_socket,SIO_FLUSH,NULL,0,NULL,0,&dwReturned,NULL,NULL);
+
     if(nRet != 0){
         int nnn = WSAGetLastError();
-        OutputDebugStringA("sdfsdf");
     }
+#endif
 }
 
 
@@ -1657,6 +1684,9 @@ WriteN(RTMP *r, const char *buffer, int n)
 
       if (nBytes < 0)
 	{
+#ifdef __APPLE__
+        
+#else
 	  int sockerr = GetSockError();
 	  RTMP_Log(RTMP_LOGERROR, "%s, RTMP send error %d (%d bytes)", __FUNCTION__,
 	      sockerr, n);
@@ -1668,6 +1698,12 @@ WriteN(RTMP *r, const char *buffer, int n)
 
 	  if (sockerr == EINTR && !RTMP_ctrlC)
 	    continue;
+#endif
+#ifdef __APPLE__
+#else
+        //we set the error in HTTP_Post if we are doing RTMPT
+        SetNetworkErrorExternal(sockerr);
+#endif
 
 
      //at this point do not call RTMP_Close without shuting down the socket
@@ -1690,7 +1726,10 @@ WriteN(RTMP *r, const char *buffer, int n)
       if (!(r->Link.protocol & RTMP_FEATURE_HTTP))
       {
         //we set the error in HTTP_Post if we are doing RTMPT
+#ifdef __APPLE__
+#else
         SetNetworkErrorExternal(sockerr);
+#endif
       }
 
       //now something interesting. How we handle different errors.
@@ -3890,7 +3929,7 @@ RTMP_Close(RTMP *r)
       double bitrt = (double)r->m_bytesSend*1000.0/((r->m_timeEnd - r->m_timeBegin));
       bitrt /= 128;
       sprintf(rr,"Bitrate: %f Kbps\n",bitrt);
-      OutputDebugStringA(rr);
+      //OutputDebugStringA(rr);
   }
 
 }
@@ -3930,7 +3969,11 @@ RTMPSockBuf_Fill(RTMPSockBuf *sb)
 	  RTMP_Log(RTMP_LOGDEBUG, "%s, recv returned %d. GetSockError(): %d (%s)",
 	      __FUNCTION__, nBytes, sockerr, strerror(sockerr));
       if (sb->sb_restarting) {
+#ifdef __APPLE__
+        sleep(50);
+#else
         Sleep(50);
+#endif
         continue;
       }
 	  if (sockerr == EINTR && !RTMP_ctrlC)
@@ -3999,6 +4042,8 @@ RTMPSockBuf_Close(RTMPSockBuf *sb)
     }
 #endif
 
+#ifdef __APPLE__
+#else
   // Clean-up WinHttp structures/handles used for RTMPT support.
     if (sb->sb_winhttp_conn) {
         WinHttpCloseHandle(sb->sb_winhttp_conn);
@@ -4031,7 +4076,7 @@ RTMPSockBuf_Close(RTMPSockBuf *sb)
       free(sb->sb_winhttp_auto_proxy_info);
       sb->sb_winhttp_auto_proxy_info = NULL;
   }
-
+#endif
   return closesocket(sb->sb_socket);
 }
 
@@ -4110,35 +4155,43 @@ DecodeTEA(AVal *key, AVal *text)
 static int
 HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
 {
-  BOOL ret = FALSE;
+  int ret = FALSE;
+#ifdef __APPLE__
+    
+#else
   unsigned long autologin_policy = WINHTTP_AUTOLOGON_SECURITY_LEVEL_LOW;
-  DWORD err;
+  HINTERNET activeConnection = NULL;
+  HINTERNET activeRequest = NULL;
+#endif
+
+  uint32_t err;
   int hlen;
-  DWORD bytesWritten;
+  uint32_t bytesWritten;
   wchar_t hbuf[512];
   wchar_t hurlbuf[512];
   char tmpBuf[1024];
   wchar_t* acceptTypes[2];
   int activeSockMsgCount;
   char headerBuf[512];
-  DWORD headerLen = 512;
+  uint32_t headerLen = 512;
   int status = 0;
   LIST_ITEM* ptr_req_item = NULL;
-  HINTERNET activeConnection = NULL;
-  HINTERNET activeRequest = NULL;
+
 
   RTMP_Log(RTMP_LOGINFO, "+HTTP_Post, num req %d num req b %d active_socket %d", r->m_sb.sb_http_req, r->m_sb.sb_http_req_b, r->m_sb.sb_active_write_socket);
 
   acceptTypes[0] = L"*/*";
   acceptTypes[1] = NULL;
 
+/* TODO unblock this
   hlen = _snwprintf(hurlbuf, 512, L"/%S%S/%d",
     RTMPT_cmds[cmd],
     r->m_clientID.av_val ? r->m_clientID.av_val : "",
-    r->m_msgCounter);
+    r->m_msgCounter);*/
 
   wcsncpy(hbuf, L"Content-type: application/x-fcs\r\n", sizeof(L"Content-type: application/x-fcs\r\n")+1);
-
+#ifdef __APPLE__
+#else
   activeConnection = r->m_sb.sb_active_write_socket == 0 ? r->m_sb.sb_winhttp_conn : r->m_sb.sb_winhttp_conn_b;
   RTMP_Log(RTMP_LOGINFO, "HTTP_Post using connection %X\n", activeConnection);
   activeRequest = WinHttpOpenRequest(activeConnection, L"POST", hurlbuf, NULL, WINHTTP_NO_REFERER, acceptTypes, 0);
@@ -4148,8 +4201,10 @@ HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
     RTMPT_cmds[cmd],
     r->m_clientID.av_val ? r->m_clientID.av_val : "",
     r->m_msgCounter);
-
+#endif
   // Configure proxy, if we're using
+#ifdef __APPLE__
+#else
   if( r->m_sb.sb_winhttp_use_auto_proxy || r->m_sb.sb_winhttp_use_manual_proxy ) {
       if (r->m_sb.sb_winhttp_use_auto_proxy && r->m_sb.sb_winhttp_req_proxy_conf == FALSE) {
             r->m_sb.sb_winhttp_req_proxy_conf = TRUE;
@@ -4159,10 +4214,10 @@ HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
                 err = GetLastError();
                 RTMP_Log(RTMP_LOGERROR, "HTTP_Post, WinHttpGetProxyForUrl url: %S err: %d", hurlbuf, err);
 
-                _snprintf(tmpBuf, 1023, "HTTP_Post, WinHttpGetProxyForUrl url: %s err: %d", hurlbuf, err);
+                //_snprintf(tmpBuf, 1023, "HTTP_Post, WinHttpGetProxyForUrl url: %s err: %d", hurlbuf, err);
             }
             else {
-                _snprintf(tmpBuf, 1023, "HTTP_Post: GetProxyForUrl proxy %S bypass %S", r->m_sb.sb_winhttp_auto_proxy_info->lpszProxy, r->m_sb.sb_winhttp_auto_proxy_info->lpszProxyBypass);
+                //_snprintf(tmpBuf, 1023, "HTTP_Post: GetProxyForUrl proxy %S bypass %S", r->m_sb.sb_winhttp_auto_proxy_info->lpszProxy, r->m_sb.sb_winhttp_auto_proxy_info->lpszProxyBypass);
             }
 
             tmpBuf[1023] = 0;
@@ -4286,7 +4341,7 @@ HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
   ptr_req_item->data = activeRequest;
   RTMP_Log(RTMP_LOGINFO, "HTTP_Post, saving req item ptr: %X", ptr_req_item);
   list_append(&r->m_sb.sb_winhttp_req_queue, ptr_req_item);
-
+#endif
   // HACK HACK HACK -- restart preemptively (before proxy terminates us)
   //if (activeSockMsgCount % 20 == 0) {
   //  RTMP_Log(RTMP_LOGINFO, "%s, socketMsgCount %d, restarting connection.", __FUNCTION__, activeSockMsgCount);
@@ -4308,18 +4363,20 @@ HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
 int
 HTTP_read(RTMP *r, int fill)
 {
-  BOOL ret;
+  int ret;
   char *ptr;
   char headerBuf[512];
   char tmpBuf[1024];
-  DWORD err;
-  DWORD headerLen = 512;
-  DWORD bytesAvail = 0;
-  DWORD bytesRead = 0;
+  uint32_t err;
+  uint32_t headerLen = 512;
+  uint32_t bytesAvail = 0;
+  uint32_t bytesRead = 0;
   int hlen = 0;
   int isNotOk = 0;
   int status = 0;
   LIST_ITEM* ptr_winhttp_req_item = NULL;
+#ifdef __APPLE__
+#else
   HINTERNET winhttp_req = NULL;
 
   RTMP_Log(RTMP_LOGINFO, "+HTTP_read fill %d numResp %d numResp_b %d read socket %d size %d timeout %d",
@@ -4489,7 +4546,7 @@ HTTP_read(RTMP *r, int fill)
   RTMP_Log(RTMP_LOGINFO, "-HTTP_read numResp %d numResp_b %d read socket %d size %d resplen %d timeout %d", r->m_sb.sb_http_resp, r->m_sb.sb_http_resp_b, r->m_sb.sb_active_read_socket, r->m_sb.sb_size, r->m_resplen, r->m_sb.sb_timedout);
 
   if (isNotOk) return -1;
-
+#endif
   return 0;
 }
 

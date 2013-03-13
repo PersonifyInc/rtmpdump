@@ -1,7 +1,6 @@
 #ifndef LIST_H
 #define LIST_H
 
-typedef int BOOL;
 #ifndef NULL
 #define NULL 0
 #endif
@@ -20,10 +19,10 @@ typedef struct LIST {
     int length;
 } LIST;
 
-BOOL list_init(LIST* list);
-BOOL list_item_init(LIST_ITEM* list_item);
+int list_init(LIST* list);
+int list_item_init(LIST_ITEM* list_item);
 int list_length(LIST* list);
-BOOL list_prepend(LIST* list, LIST_ITEM* list_item);
-BOOL list_append(LIST* list, LIST_ITEM* list_item);
-BOOL list_pop(LIST* list, LIST_ITEM** list_item);
+int list_prepend(LIST* list, LIST_ITEM* list_item);
+int list_append(LIST* list, LIST_ITEM* list_item);
+int list_pop(LIST* list, LIST_ITEM** list_item);
 #endif
