@@ -1,8 +1,11 @@
 #include "nxRtmpLogger.h"
 
+#ifdef __APPLE__
+#else
 // Windows-y string stuff
 #include <atlstr.h>
 #include <tchar.h>
+#endif
 #include <string>
 
 #ifdef UNICODE
@@ -11,6 +14,12 @@ typedef std::wstring tstring;
 typedef std::string tstring;
 #endif
 
+#ifdef __APPLE__
+void nx_rtmp_log(char* log_msg)
+{
+    printf("%s", log_msg);
+}
+#else
 // NxLogger
 #include "Logger.h"
 
@@ -26,3 +35,5 @@ void nx_rtmp_log(char* log_msg)
 {
     LOG_RTMP("%S", log_msg);
 }
+#endif
+

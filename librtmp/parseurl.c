@@ -26,8 +26,11 @@
 
 #include <assert.h>
 #include <ctype.h>
+#ifdef __APPLE__
+#else
 #include <winsock2.h>
 #include <winhttp.h>
+#endif
 
 #include "rtmp_sys.h"
 #include "log.h"
