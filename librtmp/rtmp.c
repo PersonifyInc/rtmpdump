@@ -3966,6 +3966,21 @@ RTMPSockBuf_Send(RTMPSockBuf *sb, const char *buf, int len,RTMP* r)
   if (sb->sb_ssl)
     {
       rc = TLS_write(sb->sb_ssl, buf, len);
+	  if(rc > 0)
+	  {
+		  if(r) 
+		  {
+			  r->m_bytesSend+=rc;
+			  if(r->netstatHandler)
+			  {
+				  (*r->netstatHandler)( getNow(), rc, r->netstatHandlerCtx);
+			  }
+		  }
+	  }
+	  else
+	  {
+		  //todo: get the error code here
+	  }
     }
   else
 #endif
