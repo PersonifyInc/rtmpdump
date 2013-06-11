@@ -65,11 +65,13 @@ static void rtmp_log_default(int level, const char *format, va_list vl)
 			putc('\n', fmsg);
 			neednl = 0;
 		}
+#ifdef __APPLE__
+#else
 		//fprintf(fmsg, "%s: %s\n", levels[level], str);
         sprintf(finalStr, "%u: %s [%d]: %s", GetTickCount(), levels[level], GetCurrentThreadId(), str);
         nx_rtmp_log(finalStr);
         //OutputDebugStringA(finalStr);
-
+#endif
 #ifdef _DEBUG_RTMP
 		fflush(fmsg);
 #endif

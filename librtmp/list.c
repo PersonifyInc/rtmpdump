@@ -1,6 +1,6 @@
 #include "list.h"
 
-BOOL list_init(LIST* list)
+int list_init(LIST* list)
 {
     if (!list) return FALSE;
 
@@ -11,7 +11,7 @@ BOOL list_init(LIST* list)
     return TRUE;
 }
 
-BOOL list_item_init(LIST_ITEM* list_item)
+int list_item_init(LIST_ITEM* list_item)
 {
     if (!list_item) return FALSE;
 
@@ -28,7 +28,7 @@ int list_length(LIST* list)
     return list->length;
 }
 
-BOOL list_prepend(LIST* list, LIST_ITEM* list_item)
+int list_prepend(LIST* list, LIST_ITEM* list_item)
 {
     if (!list || !list_item) return FALSE;
 
@@ -47,7 +47,7 @@ BOOL list_prepend(LIST* list, LIST_ITEM* list_item)
     return TRUE;
 }
 
-BOOL list_append(LIST* list, LIST_ITEM* list_item)
+int list_append(LIST* list, LIST_ITEM* list_item)
 {
     if (!list || !list_item) return FALSE;
 
@@ -66,7 +66,7 @@ BOOL list_append(LIST* list, LIST_ITEM* list_item)
     return TRUE;
 }
 
-BOOL list_pop(LIST* list, LIST_ITEM** list_item)
+int list_pop(LIST* list, LIST_ITEM** list_item)
 {
     if (!list || !list_item || list_length(list) == 0) return FALSE;
 
