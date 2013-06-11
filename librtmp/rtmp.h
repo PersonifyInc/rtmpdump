@@ -35,10 +35,12 @@
 #include <stdint.h>
 #include <stddef.h>
 
+#ifndef __APPLE__
 #ifdef EWOULDBLOCK
 #undef EWOULDBLOCK
 #endif
 #define EWOULDBLOCK	WSAETIMEDOUT	/* we don't use nonblocking, but we do use timeouts */
+#endif
 #include "amf.h"
 #include "list.h"
 
@@ -110,7 +112,7 @@ extern "C"
 #define RTMP_PACKET_SIZE_MINIMUM  3
 
   typedef int (*RTMP_INVOCATION_HANDLER)(AMFObject *obj,void* pCtx);
-  typedef int (*RTMP_NETWORK_STATS_HANDLER)(unsigned __int64 ts, unsigned int bytes, void* pCtx);
+  typedef int (*RTMP_NETWORK_STATS_HANDLER)(uint64_t ts, unsigned int bytes, void* pCtx);
 
   typedef struct RTMPChunk
   {
@@ -149,17 +151,21 @@ extern "C"
     int sb_active_read_socket; /* 0 for sb_socket, 1 for sb_socket_b */
     int sb_active_write_socket; /* 0 for sb_socket, 1 for sb_socket_b */
     int sb_socket;
+#ifdef __APPLE__
+
+#else
     HINTERNET sb_winhttp_sess;
     HINTERNET sb_winhttp_sess_b;
     HINTERNET sb_winhttp_conn;
     HINTERNET sb_winhttp_conn_b;
     LIST sb_winhttp_req_queue;
-    BOOL sb_winhttp_req_proxy_conf;
-    BOOL sb_winhttp_use_auto_proxy;
-    BOOL sb_winhttp_use_manual_proxy;
+    int sb_winhttp_req_proxy_conf;
+    int sb_winhttp_use_auto_proxy;
+    int sb_winhttp_use_manual_proxy;
     WINHTTP_CURRENT_USER_IE_PROXY_CONFIG* sb_winhttp_proxy_config;
     WINHTTP_AUTOPROXY_OPTIONS* sb_winhttp_auto_proxy_opts;
     WINHTTP_PROXY_INFO* sb_winhttp_auto_proxy_info;
+#endif
     int sb_size;		/* number of unprocessed bytes in buffer */
     char *sb_start;		/* pointer into sb_pBuffer of next byte to process */
     char sb_buf[RTMP_BUFFER_CACHE_SIZE];	/* data read from socket */
@@ -310,7 +316,7 @@ extern "C"
     RTMP_READ m_read;
     RTMPPacket m_write;
     RTMPSockBuf m_sb;
-    BOOL m_fPublishing;
+    int m_fPublishing;
     RTMP_LNK Link;
 
     RTMP_INVOCATION_HANDLER userHandler;
@@ -321,9 +327,9 @@ extern "C"
 
     //this is used to compute the bitrate over the life of the object
     //they are mostly informative, they are to coarse to make any decision
-    unsigned __int64    m_bytesSend;
-    unsigned __int64    m_timeBegin;
-    unsigned __int64    m_timeEnd;
+    uint64_t    m_bytesSend;
+    uint64_t    m_timeBegin;
+    uint64_t    m_timeEnd;
 
   } RTMP;
 
