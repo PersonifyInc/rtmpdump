@@ -1021,16 +1021,38 @@ RTMP_Connect0(RTMP *r, struct sockaddr * service)
   return TRUE;
 }
 
+
+#define DEBUG_LOG_SSL_KEY
+#ifdef DEBUG_LOG_SSL_KEY
+void sprint_hex(char* d, const unsigned char *s, int s_len)
+{
+  unsigned int foo;
+  int i;
+  for (i=0;i<s_len;i++) {
+    foo = *s;
+    sprintf(d,"%02X", foo);
+    s++;
+    d+=2;
+  }
+}
+#endif
+
 int
 RTMP_Connect1(RTMP *r, RTMPPacket *cp)
 {
-  LIST_ITEM* ptr_winhttp_req_item = NULL;
+#ifdef DEBUG_LOG_SSL_KEY
+      struct ssl_session_st* ssl_sess = NULL;
+      char foo[200];
+      char bar[200];
+#endif
+
+    LIST_ITEM* ptr_winhttp_req_item = NULL;
 
   if (r->Link.protocol & RTMP_FEATURE_SSL && 
       !(r->Link.protocol & RTMP_FEATURE_HTTP))
     {
 #if defined(CRYPTO) && !defined(NO_SSL)
-      TLS_client(RTMP_TLS_ctx, r->m_sb.sb_ssl);
+      SSL* ssl = (SSL*)TLS_client(RTMP_TLS_ctx, r->m_sb.sb_ssl);
       TLS_setfd(r->m_sb.sb_ssl, r->m_sb.sb_socket);
       if (TLS_connect(r->m_sb.sb_ssl) < 0)
 	{
@@ -1043,6 +1065,20 @@ RTMP_Connect1(RTMP *r, RTMPPacket *cp)
       RTMP_Close(r);
       return FALSE;
 
+#endif
+#ifdef DEBUG_LOG_SSL_KEY
+      // HACK HACK HACK -- connected here, dump out key
+      ssl_sess = SSL_get_session(ssl);
+
+      memset(foo,0,200);
+      memcpy(foo, ssl_sess->session_id, ssl_sess->session_id_length);
+      sprint_hex(bar, foo, ssl_sess->session_id_length);
+      RTMP_Log(RTMP_LOGERROR, "%s, session id: %s", __FUNCTION__, bar);
+
+      memset(foo,0,200);
+      memcpy(foo, ssl_sess->master_key, ssl_sess->master_key_length);
+      sprint_hex(bar, foo, ssl_sess->master_key_length);
+      RTMP_Log(RTMP_LOGERROR, "%s, master key: %s", __FUNCTION__, bar);
 #endif
     }
   if (r->Link.protocol & RTMP_FEATURE_HTTP)
