@@ -26,6 +26,10 @@
 #include <string.h>
 #include <assert.h>
 #include <ctype.h>
+#ifdef __APPLE__
+#include <mach/clock.h>
+#include <mach/mach.h>
+#endif
 
 #include "rtmp_sys.h"
 #include "log.h"
@@ -33,6 +37,25 @@
 
 #define MAX_PRINT_LEN	2048
 
+#ifdef __APPLE__
+uint32_t GetTickCount()
+{
+    struct timespec ts;
+    clock_serv_t cclock;
+    mach_timespec_t mts;
+    host_get_clock_service(mach_host_self(), CALENDAR_CLOCK, &cclock);
+    clock_get_time(cclock, &mts);
+    mach_port_deallocate(mach_task_self(), cclock);
+    ts.tv_sec = mts.tv_sec;
+    ts.tv_nsec = mts.tv_nsec;
+
+    return ts.tv_sec*1000 + ts.tv_nsec/1000000;
+}
+uint32_t GetCurrentThreadId()
+{
+    return 0;
+}
+#endif
 RTMP_LogLevel RTMP_debuglevel = RTMP_LOGDEBUG;
 
 static int neednl;
@@ -65,13 +88,10 @@ static void rtmp_log_default(int level, const char *format, va_list vl)
 			putc('\n', fmsg);
 			neednl = 0;
 		}
-#ifdef __APPLE__
-#else
-		//fprintf(fmsg, "%s: %s\n", levels[level], str);
+
         sprintf(finalStr, "%u: %s [%d]: %s", GetTickCount(), levels[level], GetCurrentThreadId(), str);
-        nx_rtmp_log(finalStr);
-        //OutputDebugStringA(finalStr);
-#endif
+        nx_rtmp_log_sev(level,finalStr);
+
 #ifdef _DEBUG_RTMP
 		fflush(fmsg);
 #endif
@@ -104,6 +124,7 @@ void RTMP_Log(int level, const char *format, ...)
 	va_list args;
 	va_start(args, format);
 	//cb(level, format, args);
+    rtmp_log_default(level, format, args);
 	va_end(args);
 }
 

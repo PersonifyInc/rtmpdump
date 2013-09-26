@@ -14,12 +14,6 @@ typedef std::wstring tstring;
 typedef std::string tstring;
 #endif
 
-#ifdef __APPLE__
-void nx_rtmp_log(char* log_msg)
-{
-    printf("%s", log_msg);
-}
-#else
 // NxLogger
 #include "Logger.h"
 
@@ -33,7 +27,11 @@ void nx_rtmp_log(char* log_msg)
 
 void nx_rtmp_log(char* log_msg)
 {
-    LOG_RTMP("%S", log_msg);
+    LOG_RTMP("%s", log_msg);
 }
-#endif
+
+void nx_rtmp_log_sev(int level, char* msg)
+{
+    BOOST_LOG_SEV(sp_rtmp_logger::get(), (severity_level)level) << msg;
+}
 
