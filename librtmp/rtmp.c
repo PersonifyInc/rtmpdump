@@ -38,6 +38,8 @@
 #include "log.h"
 #include "librtmp/nxRtmpLogger.h"
 
+#define _DEBUG_RTMP 1
+
 uint64_t getNow()
 {
 #ifdef __APPLE__
@@ -1685,21 +1687,19 @@ WriteN(RTMP *r, const char *buffer, int n)
 
       if (nBytes < 0)
 	{
-#ifdef __APPLE__
-        
-#else
 	  int sockerr = GetSockError();
 	  RTMP_Log(RTMP_LOGERROR, "%s, RTMP send error %d (%d bytes)", __FUNCTION__,
 	      sockerr, n);
-
+#ifdef __APPLE__
+#else
       if (sockerr == WSAENOTCONN) {
         RTMP_Log(RTMP_LOGINFO, "%s, RTMP may be reestablishing connection. Will keep trying send.", __FUNCTION__);
         continue;
       }
-
+#endif
 	  if (sockerr == EINTR && !RTMP_ctrlC)
 	    continue;
-#endif
+
 #ifdef __APPLE__
 #else
         //we set the error in HTTP_Post if we are doing RTMPT
@@ -4207,6 +4207,21 @@ HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
 
   wcsncpy(hbuf, L"Content-type: application/x-fcs\r\n", sizeof(L"Content-type: application/x-fcs\r\n")+1);
 #ifdef __APPLE__
+    char urlbuf[512];
+    int urllen = snprintf(urlbuf,512,"https://%.*s/%s%s/%d",r->Link.hostname.av_len,r->Link.hostname.av_val,RTMPT_cmds[cmd],r->m_clientID.av_val ? r->m_clientID.av_val : "", r->m_msgCounter);
+
+    CFStringRef requestMethod = CFSTR("POST");
+    CFURLRef myURL = CFURLCreateWithString(kCFAllocatorDefault, urlbuf, NULL);
+    
+    CFHTTPMessageRef request = CFHTTPMessageCreateRequest(kCFAllocatorDefault, requestMethod, myURL, kCFHTTPVersion1_1);
+    //CFDataRef serializedRequest = CFHTTPMessageCopySerializedMessage(request);
+    CFReadStreamRef stream = CFReadStreamCreateForHTTPRequest(kCFAllocatorDefault, request);
+    CFWriteSTreamOpen(stream);
+    CFWriteStreamWrite(stream, buf, len);
+    CFHTTPReadStreamSetProxy(<#CFReadStreamRef httpStream#>, <#CFStringRef proxyHost#>, <#CFIndex proxyPort#>)
+    CFWriteStream
+    CFReadStreamOpen(stream);
+    CFReadStreamRead(stream, <#UInt8 *buffer#>, <#CFIndex bufferLength#>)
 #else
   activeConnection = r->m_sb.sb_active_write_socket == 0 ? r->m_sb.sb_winhttp_conn : r->m_sb.sb_winhttp_conn_b;
   RTMP_Log(RTMP_LOGINFO, "HTTP_Post using connection %X\n", activeConnection);

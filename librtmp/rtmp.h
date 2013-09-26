@@ -35,7 +35,10 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#ifndef __APPLE__
+#ifdef __APPLE__
+//#include <CoreFoundation/CoreFoundation.h>
+#include <CFNetwork/CFNetwork.h>
+#else
 #ifdef EWOULDBLOCK
 #undef EWOULDBLOCK
 #endif
@@ -152,7 +155,6 @@ extern "C"
     int sb_active_write_socket; /* 0 for sb_socket, 1 for sb_socket_b */
     int sb_socket;
 #ifdef __APPLE__
-
 #else
     HINTERNET sb_winhttp_sess;
     HINTERNET sb_winhttp_sess_b;
