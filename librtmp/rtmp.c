@@ -911,7 +911,9 @@ RTMP_Connect0(RTMP *r, struct sockaddr * service)
   if (r->Link.protocol & RTMP_FEATURE_HTTP) {
       nx_rtmp_log("RTMP_Connect0: RTMPT connection, determining host proxy configuration");
 #ifdef __APPLE__
-      nx_rtmp_log("RTMP_Connect0: RTMPT not supported on OSX...yet.");
+      //nx_rtmp_log("RTMP_Connect0: RTMPT not supported on OSX...yet.");
+      CFStreamCreatePairWithSocketToHost(kCFAllocatorDefault, r->Link.hostname.av_val, r->Link.port, &r->m_sb.sb_read_stream, &r->m_sb.sb_write_stream);
+      CFStreamCreatePairWithSocketToHost(kCFAllocatorDefault, r->Link.hostname.av_val, r->Link.port, &r->m_sb.sb_read_stream_b, &r->m_sb.sb_write_stream_b);
 #else
       // 06232012: figure out the proxy configuration
       if( WinHttpGetIEProxyConfigForCurrentUser( r->m_sb.sb_winhttp_proxy_config ) ) {
@@ -4173,7 +4175,8 @@ HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
 {
   int ret = FALSE;
 #ifdef __APPLE__
-    
+    CFWriteStreamRef activeWriteStream;
+    CFReadStreamRef activeReadStream;
 #else
   unsigned long autologin_policy = WINHTTP_AUTOLOGON_SECURITY_LEVEL_LOW;
   HINTERNET activeConnection = NULL;
@@ -4207,6 +4210,8 @@ HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
 
   wcsncpy(hbuf, L"Content-type: application/x-fcs\r\n", sizeof(L"Content-type: application/x-fcs\r\n")+1);
 #ifdef __APPLE__
+    activeWriteStream = r->m_sb.sb_active_write_socket == 0 ? r->m_sb.sb_write_stream : r->m_sb.sb_write_stream_b;
+    activeReadStream = r->m_sb.sb_active_write_socket == 0 ? r->m_sb.sb_read_stream : r->m_sb.sb_read_stream_b;
     char urlbuf[512];
     int urllen = snprintf(urlbuf,512,"https://%.*s/%s%s/%d",r->Link.hostname.av_len,r->Link.hostname.av_val,RTMPT_cmds[cmd],r->m_clientID.av_val ? r->m_clientID.av_val : "", r->m_msgCounter);
 
@@ -4214,14 +4219,7 @@ HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
     CFURLRef myURL = CFURLCreateWithString(kCFAllocatorDefault, urlbuf, NULL);
     
     CFHTTPMessageRef request = CFHTTPMessageCreateRequest(kCFAllocatorDefault, requestMethod, myURL, kCFHTTPVersion1_1);
-    //CFDataRef serializedRequest = CFHTTPMessageCopySerializedMessage(request);
-    CFReadStreamRef stream = CFReadStreamCreateForHTTPRequest(kCFAllocatorDefault, request);
-    CFWriteSTreamOpen(stream);
-    CFWriteStreamWrite(stream, buf, len);
-    CFHTTPReadStreamSetProxy(<#CFReadStreamRef httpStream#>, <#CFStringRef proxyHost#>, <#CFIndex proxyPort#>)
-    CFWriteStream
-    CFReadStreamOpen(stream);
-    CFReadStreamRead(stream, <#UInt8 *buffer#>, <#CFIndex bufferLength#>)
+    CFDataRef activeRequest = CFHTTPMessageCopySerializedMessage(request);
 #else
   activeConnection = r->m_sb.sb_active_write_socket == 0 ? r->m_sb.sb_winhttp_conn : r->m_sb.sb_winhttp_conn_b;
   RTMP_Log(RTMP_LOGINFO, "HTTP_Post using connection %X\n", activeConnection);
@@ -4246,6 +4244,7 @@ HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
 
   // Configure proxy, if we're using
 #ifdef __APPLE__
+
 #else
   if( r->m_sb.sb_winhttp_use_auto_proxy || r->m_sb.sb_winhttp_use_manual_proxy ) {
       if (r->m_sb.sb_winhttp_use_auto_proxy && r->m_sb.sb_winhttp_req_proxy_conf == FALSE) {
@@ -4283,24 +4282,33 @@ HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
         nx_rtmp_log(tmpBuf);
       }
   }
-
+#endif
   do {
       if (activeRequest != NULL) {
           do {
+#ifdef __APPLE__
+            ret = CFWriteStreamWrite(activeWriteStream, CFDataGetBytePtr(activeRequest), CFDataGetLength(activeRequest));
+#else
             ret = WinHttpSendRequest(activeRequest, hbuf, -1L, 0, 0, len, NULL);
+
             if (ret == FALSE) {
                 err = GetLastError();
                 RTMP_Log(RTMP_LOGERROR, "HTTP_Post, WinHttpSendRequest err: %d", err);
-                _snprintf(tmpBuf, 1023, "HTTP_Post, WinHttpSendRequest err: %d", err);
+                snprintf(tmpBuf, 1023, "HTTP_Post, WinHttpSendRequest err: %d", err);
                 tmpBuf[1023] = 0;
                 nx_rtmp_log(tmpBuf);
+            }
+#endif
+#ifdef __APPLE__   
+         } while (ret == FALSE); // maybe improve this to use some equivalent RESENT_REQUEST info?
+#else
                 if(err!=ERROR_WINHTTP_RESEND_REQUEST){
                     SetNetworkErrorExternal(err);
                     return -1;
                 }
             }
           } while (ret == FALSE && err == ERROR_WINHTTP_RESEND_REQUEST);
-
+#endif
           if (ret == FALSE) {
               // Serious error here with HTTP connectivity, bail
               RTMP_Log(RTMP_LOGERROR, "HTTP_Post, WinHttpSendRequest has unrecoverable error.");
@@ -4308,16 +4316,19 @@ HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
           }
       }
       else {
+#ifndef __APPLE__
         err = GetLastError();
         RTMP_Log(RTMP_LOGERROR, "HTTP_Post, WinHttpOpenRequest err: %d", err);
         _snprintf(tmpBuf, 1023, "HTTP_Post, WinHttpOpenRequest err: %d", err);
         tmpBuf[1023] = 0;
         nx_rtmp_log(tmpBuf);
+#endif
       }
 
       RTMP_Log(RTMP_LOGDEBUG, "%s, unacked count: %d.",
         __FUNCTION__, r->m_unackd);
-      
+#ifdef __APPLE__
+#else
       bytesWritten = 0;
       ret = WinHttpWriteData(activeRequest, buf, len, &bytesWritten);
       if (ret == FALSE) {
@@ -4326,6 +4337,8 @@ HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
           _snprintf(tmpBuf, 1023, "HTTP_Post, WinHttpWriteData err: %d", err);
           tmpBuf[1023] = 0;
           nx_rtmp_log(tmpBuf);
+
+          // do something for resend request?
 
           if (err == ERROR_WINHTTP_RESEND_REQUEST) {
               RTMP_Log(RTMP_LOGINFO, "HTTP_Post, WinHttpWriteData going back to resend request");
@@ -4336,6 +4349,7 @@ HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
               RTMP_Log(RTMP_LOGERROR, "HTTP_Post, WinHttpWriteData has unrecoverable error.");
               return -1;
           }
+
       }
 	  else
 	  {
@@ -4346,14 +4360,26 @@ HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
 			  }
 		  }
 	  }
-
+#endif
       /* Ensure request was received w/o error -- and check for any proxy login requirements */
+#ifdef __APPLE__
+      CFIndex numBytesRead = 0;
+      CFMutableDataRef data = CFDataCreateMutable(kCFAllocatorDefault, 0);
+      do    {
+        UInt8 buf[1024];
+        numBytesRead = CFReadStreamRead(activeReadStream, buf, sizeof(buf));
+        if(numBytesRead > 0)
+            CFDataAppendBytes(data, buf, numBytesRead);
+      } while(numBytesRead > 0);
+      CFHTTPMessageRef response = CFReadStreamCopyProperty(activeReadStream, kCFStreamPropertyHTTPResponseHeader);
+      CFHTTPMessageSetBody(response, data);
+#else
       ret = WinHttpReceiveResponse(activeRequest, NULL);
 
       if (ret == FALSE) {
           err = GetLastError();
           RTMP_Log(RTMP_LOGERROR, "HTTP_Post, WinHttpReceiveResponse err: %d", err);
-          _snprintf(tmpBuf, 1023, "HTTP_Post, WinHttpReceiveResponse err: %d", err);
+          snprintf(tmpBuf, 1023, "HTTP_Post, WinHttpReceiveResponse err: %d", err);
           tmpBuf[1023] = 0;
           nx_rtmp_log(tmpBuf);
 
@@ -4362,6 +4388,7 @@ HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
               continue;
           }
       }
+#endif
   } while (ret == FALSE);
 
   //andrey: we do not use this anymore?
@@ -4380,6 +4407,7 @@ HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
 
   ptr_req_item = malloc(sizeof(LIST_ITEM));
   list_item_init(ptr_req_item);
+#ifndef __APPLE__
   ptr_req_item->data = activeRequest;
   RTMP_Log(RTMP_LOGINFO, "HTTP_Post, saving req item ptr: %X", ptr_req_item);
   list_append(&r->m_sb.sb_winhttp_req_queue, ptr_req_item);

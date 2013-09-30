@@ -155,6 +155,10 @@ extern "C"
     int sb_active_write_socket; /* 0 for sb_socket, 1 for sb_socket_b */
     int sb_socket;
 #ifdef __APPLE__
+    CFWriteStreamRef sb_write_stream;
+    CFReadStreamRef  sb_read_stream;
+    CFWriteStreamRef sb_write_stream_b;
+    CFReadStreamRef  sb_read_stream_b;
 #else
     HINTERNET sb_winhttp_sess;
     HINTERNET sb_winhttp_sess_b;
