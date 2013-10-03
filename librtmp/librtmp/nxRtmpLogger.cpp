@@ -19,7 +19,7 @@ typedef std::string tstring;
 
 #define LOG_RTMP_DEBUG(fmt, ...) LOG_COMPONENT(rtmp, debug, fmt, __VA_ARGS__)
 #define LOG_RTMP_INFO(fmt, ...) LOG_COMPONENT(rtmp, informative, fmt, __VA_ARGS__)
-#define LOG_RTMP(fmt, ...) LOG_COMPONENT(rtmp, normal, fmt, __VA_ARGS__)
+#define LOG_RTMP(fmt, ...) LOG_COMPONENT(rtmp, norm, fmt, __VA_ARGS__)
 #define LOG_RTMP_NOTIFY(fmt, ...) LOG_COMPONENT(rtmp, notification, fmt, __VA_ARGS__)
 #define LOG_RTMP_WARN(fmt, ...) LOG_COMPONENT(rtmp, warning, fmt, __VA_ARGS__)
 #define LOG_RTMP_ERROR(fmt, ...) LOG_COMPONENT(rtmp, error, fmt, __VA_ARGS__)
