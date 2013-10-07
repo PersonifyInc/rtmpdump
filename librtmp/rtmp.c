@@ -912,20 +912,27 @@ RTMP_Connect0(RTMP *r, struct sockaddr * service)
       nx_rtmp_log("RTMP_Connect0: RTMPT connection, determining host proxy configuration");
 #ifdef __APPLE__
       //nx_rtmp_log("RTMP_Connect0: RTMPT not supported on OSX...yet.");
-      CFStringRef host = CFStringCreateWithCString(kCFAllocatorDefault, r->Link.hostname.av_val, kCFStringEncodingASCII);
+      char hostname[r->Link.hostname.av_len+8];
+      strcpy(hostname, "https://");
+      strcat(hostname,r->Link.hostname.av_val);
+      CFStringRef host = CFStringCreateWithCString(kCFAllocatorDefault, "i-6213e70c.nuvixa.com", kCFStringEncodingASCII);
       CFStreamCreatePairWithSocketToHost(kCFAllocatorDefault, host, r->Link.port, &r->m_sb.sb_read_stream, &r->m_sb.sb_write_stream);
       CFReadStreamOpen(r->m_sb.sb_read_stream);
-      while(CFWriteStreamGetStatus(r->m_sb.sb_read_stream) == kCFStreamStatusOpening){sleep(1);}
+      while(CFReadStreamGetStatus(r->m_sb.sb_read_stream) == kCFStreamStatusOpening){sleep(1);}
       if(CFReadStreamGetStatus(r->m_sb.sb_read_stream) != kCFStreamStatusOpen)
       {
+          CFErrorRef err = CFReadStreamCopyError(r->m_sb.sb_read_stream);
+          CFStringRef errS = CFErrorCopyDescription(err);
+          RTMP_Log(RTMP_LOGERROR, "%s", CFStringGetCStringPtr(errS, kCFStringEncodingASCII));
           RTMP_Log(RTMP_LOGERROR, "Failed to open read stream");
       }
       CFWriteStreamOpen(r->m_sb.sb_write_stream);
       while(CFWriteStreamGetStatus(r->m_sb.sb_write_stream) == kCFStreamStatusOpening){sleep(1);}
-      if(CFWriteStreamGetStatus(r->m_sb.sb_read_stream) != kCFStreamStatusOpen)
+      if(CFWriteStreamGetStatus(r->m_sb.sb_write_stream) != kCFStreamStatusOpen)
       {
           RTMP_Log(RTMP_LOGERROR, "Failed to open write stream");
       }
+      RTMP_Log(RTMP_LOGERROR,"Connected");
 #else
       // 06232012: figure out the proxy configuration
       if( WinHttpGetIEProxyConfigForCurrentUser( r->m_sb.sb_winhttp_proxy_config ) ) {
@@ -4353,6 +4360,8 @@ HTTP_Post(RTMP *r, RTMPTCmd cmd, const char *buf, int len)
             memmove(buf, buf+bytesWritten,bufLen);
             CFStreamError error = CFWriteStreamGetError(activeWriteStream);
             RTMP_Log(RTMP_LOGERROR,"HTTP_Post partil write error: %u",err);
+        } else {
+            done = true;
         }
       }/*end while*/
       ret = TRUE;
